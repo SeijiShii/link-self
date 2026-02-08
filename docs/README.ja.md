@@ -20,6 +20,7 @@
   - [まとめ：何がすごいのか](#まとめ何がすごいのか)
 - [Technical Approach（技術の要点）](#technical-approach)
 - [Roadmap（ロードマップ）](#roadmap)
+- [Phase 1 設計・実装方針](phase1-design.md)（実装済みコアの設計ドキュメント）
 - [Getting Started（開発の始め方）](#getting-started)
 
 ---
@@ -821,9 +822,10 @@ LinkSelfでも、これと同様の方法を取ります。
 <a id="roadmap"></a>
 ## 🚀 Roadmap (ロードマップ)
 
-- [ ] **Phase 1: コアロジックの定義と実装**
+- [x] **Phase 1: コアロジックの定義と実装**（実装済み）
     - コアロジックの定義と実装 (Core logic definition and implementation)
     - ローカルで複数のノードを立ち上げ、様々なテストケースを網羅する (Run multiple nodes locally and cover various test cases)
+    - 詳細: [Phase 1 設計・実装方針](phase1-design.md)、[core/README.md](../core/README.md)
 - [ ] **Phase 2: インフラモジュール**
     - インフラモジュールの整備 (Infrastructure module)
     - サンプルアプリ：チャット、ファイル共有 (Sample apps: chat, file sharing)
