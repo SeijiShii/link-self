@@ -158,6 +158,19 @@ func (n *Node) SetOnMessage(fn func(peerDID string, payload []byte)) {
 	n.onMessage = fn
 }
 
+// SendToGroup sends a message to each member DID (excluding self). Uses SendMessage per DID;
+// offline peers are queued by store-and-forward.
+func (n *Node) SendToGroup(ctx context.Context, memberDIDs []string, payload []byte) error {
+	myDID := n.Identity.DID
+	for _, did := range memberDIDs {
+		if did == myDID {
+			continue
+		}
+		_ = n.SendMessage(ctx, did, payload)
+	}
+	return nil
+}
+
 // SendMessage sends a message to the peer with the given DID. If the peer is not reachable,
 // the message is queued (store-and-forward) and sent when the peer comes online.
 func (n *Node) SendMessage(ctx context.Context, peerDID string, payload []byte) error {
