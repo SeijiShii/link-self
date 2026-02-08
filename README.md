@@ -1,5 +1,7 @@
 # LinkSelf
 
+<p align="center"><img src="docs/assets/linkself-logo.png" alt="LinkSelf" width="120" /></p>
+
 **A pure P2P infrastructure for the sovereign individual. No servers, just DID-based existence and direct links.**
 
 主権ある個人のための純粋なP2Pインフラ。サーバーは不要。DIDによる実存の証明とダイレクトな繋がりを。
