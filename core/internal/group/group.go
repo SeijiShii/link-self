@@ -3,11 +3,13 @@ package group
 import "errors"
 
 var (
-	ErrTooFewMembers        = errors.New("group requires at least 2 members")
-	ErrNotMember            = errors.New("not a member of the group")
-	ErrNotOwner             = errors.New("not an owner of the group")
+	ErrTooFewMembers          = errors.New("group requires at least 2 members")
+	ErrNotMember              = errors.New("not a member of the group")
+	ErrNotOwner               = errors.New("not an owner of the group")
 	ErrCannotDemoteOtherOwner = errors.New("owner cannot demote another owner")
-	ErrTargetNotMember      = errors.New("target is not a member")
+	ErrTargetNotMember        = errors.New("target is not a member")
+	ErrNoOwner                = errors.New("cannot add member when group has no owners")
+	ErrAlreadyMember          = errors.New("already a member of the group")
 )
 
 // Service applies domain rules (member count, leave, owner permissions, auto-promote) using Store.
@@ -138,6 +140,26 @@ func (s *Service) DemoteOwner(groupID string, actorDID string, targetDID string)
 		return ErrCannotDemoteOtherOwner
 	}
 	return nil
+}
+
+// AddMember adds newMemberDID to the group. Fails if the group has no owners (オーナー0では3人目招待不可).
+func (s *Service) AddMember(groupID string, newMemberDID string) error {
+	g, err := s.store.GetGroup(groupID)
+	if err != nil {
+		return err
+	}
+	if g == nil {
+		return ErrGroupNotFound
+	}
+	if len(g.Owners) == 0 {
+		return ErrNoOwner
+	}
+	if contains(g.Members, newMemberDID) {
+		return ErrAlreadyMember
+	}
+	newMembers := append([]string{}, g.Members...)
+	newMembers = append(newMembers, newMemberDID)
+	return s.store.UpdateGroup(groupID, newMembers, g.Owners)
 }
 
 func contains(slice []string, x string) bool {

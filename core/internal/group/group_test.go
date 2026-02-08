@@ -223,3 +223,59 @@ func TestLastOwnerLeaving_ByLeave(t *testing.T) {
 		t.Fatal("after last owner left, should have auto-promoted, got 0 owners")
 	}
 }
+
+func TestAddMember_RejectsWhenNoOwners(t *testing.T) {
+	store := NewMemStore()
+	svc := NewService(store)
+	id, _ := svc.CreateGroup([]string{"did:a", "did:b"}, nil)
+	err := svc.AddMember(id, "did:c")
+	if err != ErrNoOwner {
+		t.Errorf("AddMember when 0 owners: got %v, want ErrNoOwner", err)
+	}
+	g, _ := store.GetGroup(id)
+	if len(g.Members) != 2 {
+		t.Errorf("group should still have 2 members, got %v", g.Members)
+	}
+}
+
+func TestAddMember_SucceedsWhenHasOwner(t *testing.T) {
+	store := NewMemStore()
+	svc := NewService(store)
+	id, _ := svc.CreateGroup([]string{"did:a", "did:b"}, []string{"did:a"})
+	err := svc.AddMember(id, "did:c")
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	g, _ := store.GetGroup(id)
+	if len(g.Members) != 3 {
+		t.Errorf("after AddMember: members %v, want 3", g.Members)
+	}
+	hasC := false
+	for _, d := range g.Members {
+		if d == "did:c" {
+			hasC = true
+			break
+		}
+	}
+	if !hasC {
+		t.Error("did:c should be in members after AddMember")
+	}
+}
+
+func TestAddMember_GroupNotFound(t *testing.T) {
+	svc := NewService(NewMemStore())
+	err := svc.AddMember("no-such-id", "did:c")
+	if err != ErrGroupNotFound {
+		t.Errorf("AddMember(unknown group): got %v, want ErrGroupNotFound", err)
+	}
+}
+
+func TestAddMember_AlreadyMember(t *testing.T) {
+	store := NewMemStore()
+	svc := NewService(store)
+	id, _ := svc.CreateGroup([]string{"did:a", "did:b"}, []string{"did:a"})
+	err := svc.AddMember(id, "did:b")
+	if err != ErrAlreadyMember {
+		t.Errorf("AddMember(already member): got %v, want ErrAlreadyMember", err)
+	}
+}
