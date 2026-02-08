@@ -64,6 +64,8 @@ This project is **open source** (Apache-2.0) and welcomes contributions.
 We plan to register the project on **Gitcoin Grants** to accept donations. Your support helps sustain development.  
 **Gitcoin Grants** でプロジェクトを登録し寄付を募る予定です。寄付で開発を支援できます。（URL は準備でき次第追記）
 
+*For developers: [Gitcoin funding procedure](docs/gitcoin-funding.md) ([English](docs/gitcoin-funding.en.md)) — 開発者の備忘: [Gitcoin で資金調達するための手順](docs/gitcoin-funding.md)*
+
 ---
 
 ## Roadmap | ロードマップ
