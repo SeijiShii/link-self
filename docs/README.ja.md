@@ -823,7 +823,7 @@ LinkSelfでも、これと同様の方法を取ります。
 - **libp2p DHT** … DIDと「今どこにいるか」を分散の電話帳で管理。中央サーバーなし。Bitcoinと同じ考え方。
 - **経路** … DHT検索のほか、mDNS（同一Wi-Fi）、Bluetooth、リレー、手動共有（QRなど）。
 - **本人確認** … 接続時に秘密鍵でチャレンジ・レスポンス。なりすましは自動拒絶。
-- **Cross-Platform** … Goコア + Flutter（Android / iOS / Windows）。
+- **Cross-Platform** … Goコアを各プラットフォームでライブラリとして利用可能。UI はプラットフォームに合わせて選択（例: Electron, Flutter, ネイティブ）。
 - **Local-first Sync** … Store-and-Forward。相手がオンラインになったら同期。
 
 <a id="oss"></a>

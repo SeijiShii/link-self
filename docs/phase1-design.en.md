@@ -62,7 +62,7 @@ link-self/
 ```
 
 - **go.mod** is only under **core/**. Module path: `github.com/SeijiShii/link-self/core`.
-- Phase 2+ (Flutter, other repos) will import this `core` module (gomobile / FFI will also target `core/`).
+- Phase 2+ (apps on each platform—Flutter, Electron, native, etc.—or other repos) will import this `core` module (gomobile / FFI / subprocess will also target `core/`).
 
 ---
 

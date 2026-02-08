@@ -49,8 +49,8 @@ Central servers are convenient (login, sync, always-on) but they **know everythi
   **発見** — DHT、mDNS（同一Wi‑Fi）、Bluetooth、リレー、手動共有（QR）。
 - **Identity on connect** — Challenge–response with secret key; impersonation is rejected automatically.  
   **接続時の本人確認** — 秘密鍵でチャレンジ・レスポンス。なりすましは自動拒絶。
-- **Cross-platform** — Go core + Flutter (Android, iOS, Windows).  
-  **クロスプラットフォーム** — Goコア + Flutter（Android / iOS / Windows）。
+- **Cross-platform** — Go core usable as a library on each platform; UI chosen per platform (e.g. Electron, Flutter, native).  
+  **クロスプラットフォーム** — Goコアを各プラットフォームでライブラリとして利用可能。UI はプラットフォームに合わせて選択（例: Electron, Flutter, ネイティブ）。
 - **Local-first sync** — Store-and-forward when the peer is online.  
   **Local-first同期** — 相手がオンラインになったら送信（Store-and-Forward）。
 
@@ -92,6 +92,9 @@ go mod init github.com/SeijiShii/link-self
 ```
 
 ---
+
+**Using LinkSelf as a library (platform-appropriate integration):**  
+[English](docs/using-linkself-as-library.en.md) | [日本語](docs/using-linkself-as-library.md)
 
 **Full documentation (philosophy, scenario, FAQ, security):**  
 [English](docs/README.en.md) | [日本語](docs/README.ja.md)

@@ -67,7 +67,7 @@ No central server ever appears: DIDs are generated on your device, connections a
 - **libp2p DHT** — Maps DIDs to “where are you now” in a distributed phone book; no central server (same idea as Bitcoin).
 - **Discovery** — DHT plus mDNS (same Wi‑Fi), Bluetooth, relay, or manual share (QR, etc.).
 - **Identity** — Challenge–response with the secret key on connect; impersonation is rejected automatically.
-- **Cross-platform** — Go core + Flutter (Android, iOS, Windows).
+- **Cross-platform** — Go core usable as a library on each platform; UI chosen per platform (e.g. Electron, Flutter, native).
 - **Local-first sync** — Store-and-forward when the peer is online.
 
 ---

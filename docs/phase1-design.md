@@ -83,7 +83,7 @@ link-self/
 ```
 
 - `go.mod` は **core/** 直下のみ。モジュールパスは `github.com/SeijiShii/link-self/core`。
-- Phase 2 以降で Flutter や他リポジトリから参照する場合は、この `core` モジュールを import（gomobile / FFI で利用する際も `core/` をビルド対象にする）。
+- Phase 2 以降で各プラットフォームのアプリ（Flutter、Electron、ネイティブなど）や他リポジトリから参照する場合は、この `core` モジュールを import（gomobile / FFI / subprocess で利用する際も `core/` をビルド対象にする）。
 
 ---
 
