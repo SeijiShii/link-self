@@ -1,5 +1,6 @@
 # グループの概念
 
+**日本語**（このページ）| [English](group-concept.en.md)  
 **参照:** [Phase 1 設計](phase1-design.md)、[分散ネットワーク DB 化計画](sync-db-plan.md)
 
 ---
@@ -79,3 +80,11 @@
 - **Phase 1 設計** ([phase1-design.md](phase1-design.md)): グループは Phase 1 のスコープに含む。送信・接続 API はグループ単位（SendToGroup / ConnectToGroup）を想定。
 - **分散ネットワーク DB 化** ([sync-db-plan.md](sync-db-plan.md)): 同期対象のグループは「groupId に紐づくメンバー DID のリスト」として扱う。グループ概念と整合する。
 - **サンプルチャット** ([sample-chat-app-plan.md](sample-chat-app-plan.md)): 2 人グループのケースで SendToGroup / ConnectToGroup を利用する想定。
+
+---
+
+## 8. 実装とテスト
+
+- **実装**: [core/internal/group](../core/internal/group)。ストアはインターフェース（`Store`）で定義し、インメモリ実装（`NewMemStore`）を同梱。ドメインロジックは `Service`（`CreateGroup`, `Leave`, `Kick`, `AppointOwner`, `SelfDemote`, `DemoteOwner`）で提供。SQLite3 実装は未実装（将来のインフラとして追加可能）。
+- **テスト**: ストア単体（`store_test.go`: Create/Get/List/Update/Delete/GetNotFound/一意 ID）、ドメイン単体（`group_test.go`: メンバー数・脱退・解体・オーナー権限・他オーナー降格不可・最後のオーナー時の自動昇格）。
+- **詳細**: [グループ・同期 DB 実装ドキュメント](group-syncdb-implementation.md) の「1. グループ」を参照。

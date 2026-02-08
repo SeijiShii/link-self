@@ -20,10 +20,11 @@
   - [まとめ：何がすごいのか](#まとめ何がすごいのか)
 - [Technical Approach（技術の要点）](#technical-approach)
 - [Roadmap（ロードマップ）](#roadmap)
-- [Phase 1 設計・実装方針](phase1-design.md)（実装済みコアの設計ドキュメント）
-- [グループの概念](group-concept.md)（グループ・オーナー・脱退・権限の扱い）
-- [分散ネットワーク DB 化計画](sync-db-plan.md)（アプリからネットワークを DB として扱う設計）
-- [サンプルチャットアプリ計画](sample-chat-app-plan.md)（グループ API を用いたサンプルアプリの設計）
+- Phase 1 設計・実装方針: [日本語](phase1-design.md) | [English](phase1-design.en.md)（実装済みコアの設計ドキュメント）
+- グループの概念: [日本語](group-concept.md) | [English](group-concept.en.md)（グループ・オーナー・脱退・権限の扱い）
+- 分散ネットワーク DB 化計画: [日本語](sync-db-plan.md) | [English](sync-db-plan.en.md)（アプリからネットワークを DB として扱う設計）
+- グループ・同期 DB 実装: [日本語](group-syncdb-implementation.md) | [English](group-syncdb-implementation.en.md)（実装・テストのドキュメント）
+- サンプルチャットアプリ計画: [日本語](sample-chat-app-plan.md) | [English](sample-chat-app-plan.en.md)（グループ API を用いたサンプルアプリの設計）
 - [Getting Started（開発の始め方）](#getting-started)
 
 ---

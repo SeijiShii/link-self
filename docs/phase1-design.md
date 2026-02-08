@@ -1,5 +1,6 @@
 # Phase 1: コアロジック — 設計・実装方針
 
+**日本語**（このページ）| [English](phase1-design.en.md)  
 **ステータス:** 実装済み（ローカル多ノードテスト含む）  
 **参照:** [Roadmap（ロードマップ）](README.ja.md#roadmap)、[core/README.md](../core/README.md)
 

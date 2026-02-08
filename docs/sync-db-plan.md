@@ -1,7 +1,8 @@
 # 分散型ネットワークを DB として扱う設計計画
 
-**ステータス:** 計画（実装は未着手）  
-**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](group-concept.md)
+**日本語**（このページ）| [English](sync-db-plan.en.md)  
+**ステータス:** コア実装済み（同期レイヤ・ストレージ IF・インメモリ実装。SQLite 参照実装は未着手）  
+**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](group-concept.md)、[グループ・同期 DB 実装ドキュメント](group-syncdb-implementation.md)
 
 ---
 
@@ -19,9 +20,9 @@
 
 ## 2. 現状の前提
 
-- [core/internal/node](core/internal/node/node.go): 送信は 1 対 1（SendMessage）またはグループ（SendToGroup 計画）。グループは [グループの概念](group-concept.md) に従い、メンバー DID のリストとして扱う。
+- [core/internal/node](core/internal/node/node.go): 送信は 1 対 1（SendMessage）およびグループ（SendToGroup 実装済み）。グループは [グループの概念](group-concept.md) に従い、メンバー DID のリストとして扱う。
 - [core/internal/storeforward](core/internal/storeforward/storeforward.go): オフライン時はキューに保存し、オンライン検知後に送信。
-- グループ = **メンバー DID のリスト**。groupId に紐づく DID リストはアプリまたは拡張レイヤが保持する（[グループの概念](group-concept.md) 参照）。
+- グループ = **メンバー DID のリスト**。groupId に紐づく DID リストは [core/internal/group](core/internal/group) の Store で保持し、同期レイヤは MemberResolver（group.Store ラップ）で取得する（[グループの概念](group-concept.md) 参照）。
 
 ---
 
@@ -132,3 +133,11 @@ flowchart TB
 - 同期レイヤは **メタ付与・即時配信・後勝ち適用** のみを担当する。各レコードに ID, groupId, DID, Timestamp を付与し、コミット時に **即時に** ネットワーク上のデバイス（その groupId に属するメンバー DID）へ SendToGroup で共有する。
 - 受信側では **レコード単位で Timestamp 比較** し、**後勝ち** でストレージインターフェース経由で適用する。
 - グループは [グループの概念](group-concept.md) に従い、**groupId に紐づくメンバー DID のリスト** として同期レイヤまたはアプリが保持する。
+
+---
+
+## 7. 実装とテスト
+
+- **実装**: [core/internal/syncdb](../core/internal/syncdb)。`RecordStorage` インターフェースとインメモリ実装（`NewMemStorage`）、`MemberResolver`（`GroupStoreResolver` で group.Store をラップ、自 DID 除外）、`SyncLayer`（`Put` / `HandleIncoming`）。node に `SendToGroup` を追加済み。ペイロードは `SyncRecord` の JSON。
+- **テスト**: 単体（`sync_test.go`: メタ付与・保存・SendToGroup 呼び出し、後勝ち適用・古いタイムスタンプスキップ・Deleted 時の Delete）、統合（`test/integration/syncdb_test.go`: 2 ノード + 1 グループで A が Put → B が受信してストレージに反映）。
+- **詳細**: [グループ・同期 DB 実装ドキュメント](group-syncdb-implementation.md) の「2. ノードの SendToGroup」「3. 同期 DB」「4. 統合テスト」を参照。
