@@ -16,9 +16,10 @@
 | **起動・DHT 登録** | ノード起動時に libp2p DHT へ「DID ↔ 自分のアドレス」を提供。 |
 | **発見** | 相手の DID で DHT を検索し、アドレス（PeerID / Multiaddr）を取得。 |
 | **接続・本人確認** | 取得したアドレスに接続し、秘密鍵によるチャレンジ・レスポンスで認証。なりすましは拒絶。 |
-| **メッセージ** | Store-and-Forward。相手オフライン時はローカルに保持し、オンライン検知後に送信。 |
+| **メッセージ** | Store-and-Forward。グループ単位で送信（自分を除く各メンバー DID に配信）。相手オフライン時はローカルに保持し、オンライン検知後に送信。 |
+| **グループ** | メンバー DID の集合（2 人以上）。1 対 1 は 2 人グループのケース。メンバーリストは各ノードがローカルに保持。詳細は [グループの概念](group-concept.md) を参照。 |
 
-Phase 2 以降の「複数デバイス同期（mDNS）」「グループ」は Phase 1 のスコープ外です。
+注: 送信・接続 API はグループ汎用（SendToGroup / ConnectToGroup）への移行を計画している。現状実装は 1 対 1（SendMessage / Connect）のまま。
 
 ---
 
@@ -99,7 +100,7 @@ link-self/
    ストリーム確立後、送信側がランダムチャレンジを送り、受信側が秘密鍵で署名して返す。送信側が DID/公開鍵で検証。失敗時はストリームを閉じる。
 
 4. **ノード（node）**  
-   Host + DHT + Auth を組み立て、`Connect(did)` で「DID で検索 → 接続 → 認証」までを実行。Store-and-Forward のフラッシュトリガー（Connect 成功時・着信 auth 完了時）を接続。
+   Host + DHT + Auth を組み立て、接続はグループ単位（ConnectToGroup）を想定。現状は `Connect(did)` で「DID で検索 → 接続 → 認証」までを実行。Store-and-Forward のフラッシュトリガー（Connect 成功時・着信 auth 完了時）でキューを送信。
 
 5. **Store-and-Forward（storeforward）**  
    送信先 DID ごとにメッセージをメモリで保持。認証済みピア接続時または Connect 成功時に、その DID に紐づくキューを送信。送信失敗時は未送分を再キュー。
@@ -143,3 +144,9 @@ link-self/
 ## 8. Phase 2 以降との関係
 
 Phase 2（インフラモジュール・サンプルアプリ）は、本 Phase 1 で実装した `core` モジュール（`core/internal` の API）を呼び出す形で拡張する想定です。ルートの [README.md](../README.md) の Getting Started は、`cd link-self/core` で `go mod tidy` 等を実行する旨に Phase 2 で更新する想定です。
+
+## 9. 関連ドキュメント
+
+- [グループの概念](group-concept.md): グループ・オーナー・脱退・権限の扱い。
+- [分散ネットワーク DB 化計画](sync-db-plan.md): アプリからネットワークを DB として扱う設計。
+- [サンプルチャットアプリ計画](sample-chat-app-plan.md): グループ API を用いたサンプルアプリの設計。

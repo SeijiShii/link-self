@@ -72,7 +72,7 @@ No central server ever appears: DIDs are generated on your device, connections a
 
 ## Roadmap
 
-- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design (Japanese)](phase1-design.md) and [core/README.md](../core/README.md).
+- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design (Japanese)](phase1-design.md) and [core/README.md](../core/README.md). Related: [Group concept (Japanese)](group-concept.md), [Sync DB plan (Japanese)](sync-db-plan.md), [Sample chat app plan (Japanese)](sample-chat-app-plan.md).
 - [ ] **Phase 2: Infrastructure** — Infrastructure module; sample apps (chat, file sharing).
 - [ ] **Phase 3: Platforms** — PC (desktop), Android, iOS.
 
