@@ -1,45 +1,81 @@
 # LinkSelf
 
-**A pure P2P infrastructure for the sovereign individual. No servers, just DID-based existence and direct links.** *主権ある個人のための純粋なP2Pインフラ。サーバーは不要。DIDによる実存の証明とダイレクトな繋がりを。*
+**A pure P2P infrastructure for the sovereign individual. No servers, just DID-based existence and direct links.**
+
+主権ある個人のための純粋なP2Pインフラ。サーバーは不要。DIDによる実存の証明とダイレクトな繋がりを。
 
 ---
 
-## 🖋 Philosophy (哲学と美学)
+## Documentation | ドキュメント
 
-In the modern digital world, our "existence" and "connections" depend on massive central servers. LinkSelf fundamentally overturns this structure.
+**Detailed documentation (full text):**  
+[English](docs/README.en.md) | [日本語](docs/README.ja.md)
 
-現代のデジタル世界において、私たちの「実存」や「繋がり」は巨大な中央サーバーに依存しています。LinkSelfはその構造を根本から覆します。
+---
 
-- **Zero Servers:** Data moves directly between devices, bypassing intermediaries. (サーバー・ゼロ: データをデバイス間で直接移動させます)
-- **Proof of Existence:** Your private key is your only identity. No phone numbers, no emails. (実存の証明: 秘密鍵のみがアイデンティティを証明します)
-- **Autonomous Links:** Devices discover and sync automatically via Bluetooth, Wi-Fi Direct, or across the internet. (自律する繋がり: あらゆるネットワークを介して自律的に同期します)
+## Overview | 概要
 
+### What is LinkSelf? | LinkSelfとは？
 
+LinkSelf is a **serverless P2P** stack: your identity (DID), your connections, and your data stay on your devices. Peers find each other via libp2p DHT; messages are end-to-end encrypted. No central server, no single point of control or censorship.
 
-## 🛠 Technical Approach (技術的アプローチ)
+LinkSelfは**サーバー不要のP2P**スタックです。あなたのアイデンティティ（DID）、繋がり、データはあなたのデバイスにあります。ピアはlibp2p DHTで互いを見つけ、メッセージはエンドツーエンド暗号化。中央サーバーも、支配や検閲の拠点もありません。
 
-- **Decentralized Identifier (DID):** Uses the `did:key` method for offline-capable self-sovereign identity. (W3C準拠の `did:key` を採用し、オフラインでも自己証明を可能に)
-- **libp2p:** Leveraging the world's most robust P2P stack for NAT traversal and encrypted communication. (libp2pによる強力なNAT越えと暗号化通信)
-- **Cross-Platform:** Go-based core engine, accessible via Flutter on Android, iOS, and Windows. (Go製コアエンジンとFlutterによるマルチプラットフォーム展開)
-- **Local-first Sync:** Store-and-forward logic for peer synchronization when both parties are online. (相手がオンラインになった瞬間に同期する遅延送付ロジック)
+### Why P2P? | なぜP2Pか？
 
-## 🚀 Roadmap (ロードマップ)
+Central servers are convenient (login, sync, always-on) but they **know everything about you**, hold your data, and can be compelled to hand it over. P2P gives you: **your data is yours**, **no one can delete your account**, **no single point of control**, **no censorship**, and **the network lasts as long as participants exist**.
 
-- [ ] **Phase 1: Core Identity (Go)**
-    - Implement `ed25519` key management and `did:key` generation. (`did:key` 生成と鍵管理の実装)
-    - Establish basic P2P handshake using libp2p. (libp2pによる基本的なP2P通信の確立)
-- [ ] **Phase 2: Mobile Integration (Flutter)**
-    - Seamless data sharing from Android "Share Menu". (Android共有メニューからのシームレスなデータ連携)
-    - Multi-device auto-sync protocol. (マルチデバイス間の自動同期プロトコル)
-- [ ] **Phase 3: Ecosystem**
-    - Release SDK for other apps to use LinkSelf for auth/comm. (他アプリ向け認証・通信SDKの公開)
-    - Sustainable development via Public Goods funding (e.g., Gitcoin). (Gitcoin等による持続的な開発体制)
+中央サーバーは便利（ログイン、同期、常時接続）だが、**あなたのことをすべて知り**、データを握り、当局に渡す義務を負う。P2Pなら：**データはあなたのもの**、**アカウントを消されない**、**支配の拠点がない**、**検閲できない**、**参加者がいる限りネットワークは残る**。
 
-## 📦 Getting Started (開発の始め方)
+### How it works (short) | 仕組み（要約）
 
-*This project is in early pre-alpha stage.*
+1. **Identity** — You generate a DID (`did:key:...`) from a secret key on your device. Share it (QR, link). **アイデンティティ** — 端末で秘密鍵からDIDを生成。QRやリンクで共有。
+2. **Contacts** — Others add your DID to their local “contacts.” No server. **連絡先** — 相手があなたのDIDをローカルの「連絡先」に追加。サーバー不要。
+3. **Discovery** — When you run LinkSelf, you register “I am DID X at IP Y” in the libp2p DHT. Other nodes hold parts of this “phone book.” **発見** — LinkSelfを起動すると、libp2p DHTに「DID X、IP Y」を登録。他のノードが「電話帳」の一部を保持。
+4. **Connection** — To talk to someone, you look up their DID in the DHT, get their IP, connect directly, and prove identity with a secret-key challenge–response. **接続** — 相手のDIDをDHTで検索し、IPを取得して直接接続。秘密鍵でチャレンジ・レスポンスして本人確認。
+5. **Messages** — Store-and-forward: if the peer is offline, you keep the message locally and send when they come online. **メッセージ** — 相手がオフラインならローカルに保管し、オンラインになったら送信（Store-and-Forward）。
+6. **Multiple devices** — Same secret key → same DID on phone, PC, tablet; they find each other (mDNS / DHT) and sync P2P. **複数デバイス** — 同じ秘密鍵で同じDID。mDNS／DHTで発見し、P2Pで同期。
+7. **Groups** — Group metadata on the DHT; members add/remove by agreement. No single place to censor or delete. **グループ** — グループのメタデータはDHT上。メンバーで合意して追加・削除。一括削除する拠点はない。
+
+### Technical stack | 技術スタック
+
+- **DID (did:key)** — Self-sovereign ID; offline-capable, tamper-proof.  
+  **DID（did:key）** — 自己主権ID。オフラインでも作成可能、改ざん不可。
+- **libp2p DHT** — Distributed “phone book” for DID ↔ address; no central server (same idea as Bitcoin).  
+  **libp2p DHT** — DIDとアドレスを分散の「電話帳」で管理。中央サーバーなし（Bitcoinと同じ考え方）。
+- **Discovery** — DHT, mDNS (same Wi‑Fi), Bluetooth, relay, manual share (QR).  
+  **発見** — DHT、mDNS（同一Wi‑Fi）、Bluetooth、リレー、手動共有（QR）。
+- **Identity on connect** — Challenge–response with secret key; impersonation is rejected automatically.  
+  **接続時の本人確認** — 秘密鍵でチャレンジ・レスポンス。なりすましは自動拒絶。
+- **Cross-platform** — Go core + Flutter (Android, iOS, Windows).  
+  **クロスプラットフォーム** — Goコア + Flutter（Android / iOS / Windows）。
+- **Local-first sync** — Store-and-forward when the peer is online.  
+  **Local-first同期** — 相手がオンラインになったら送信（Store-and-Forward）。
+
+---
+
+## Roadmap | ロードマップ
+
+- [ ] **Phase 1: Core logic** — Define and implement; run multiple nodes locally, cover various test cases.  
+  **Phase 1: コアロジック** — 定義・実装。ローカルで複数ノードを立ち上げ、様々なテストケースを網羅。
+- [ ] **Phase 2: Infrastructure** — Infrastructure module; sample apps (chat, file sharing).  
+  **Phase 2: インフラモジュール** — インフラモジュール整備。サンプルアプリ（チャット、ファイル共有）。
+- [ ] **Phase 3: Platforms** — PC, Android, iOS.  
+  **Phase 3: プラットフォーム** — PC、Android、iOS。
+
+---
+
+## Getting Started | 開発の始め方
+
+*This project is in early pre-alpha. / 本プロジェクトはプレアルファ段階です。*
 
 ```bash
-git clone [https://github.com/SeijiShii/link-self.git](https://github.com/SeijiShii/link-self.git)
+git clone https://github.com/SeijiShii/link-self.git
 cd link-self
-go mod init [github.com/SeijiShii/link-self](https://github.com/SeijiShii/link-self)
+go mod init github.com/SeijiShii/link-self
+```
+
+---
+
+**Full documentation (philosophy, scenario, FAQ, security):**  
+[English](docs/README.en.md) | [日本語](docs/README.ja.md)
