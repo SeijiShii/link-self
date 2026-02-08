@@ -27,6 +27,7 @@
 - 分散ネットワーク DB 化計画: [日本語](sync-db-plan.md) | [English](sync-db-plan.en.md)（アプリからネットワークを DB として扱う設計）
 - グループ・同期 DB 実装: [日本語](group-syncdb-implementation.md) | [English](group-syncdb-implementation.en.md)（実装・テストのドキュメント）
 - サンプルアプリ計画（チャット＋ファイル共有）: [日本語](sample-chat-app-plan.md) | [English](sample-chat-app-plan.en.md)（LinkSelf をインフラとして使う本格サンプルアプリの設計）
+- Gitcoin で資金調達するための手順: [日本語](gitcoin-funding.md) | [English](gitcoin-funding.en.md)（Gitcoin Grants への登録・申請手順）
 - [Getting Started（開発の始め方）](#getting-started)
 
 ---

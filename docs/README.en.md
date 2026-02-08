@@ -16,6 +16,8 @@
 - [Roadmap](#roadmap)
 - [Getting Started](#getting-started)
 
+**Related docs:** [Phase 1 design](phase1-design.en.md), [Group concept](group-concept.en.md), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md), [Gitcoin funding procedure](gitcoin-funding.en.md).
+
 ---
 
 ## Central servers are convenient. But…

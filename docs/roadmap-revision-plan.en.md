@@ -30,6 +30,8 @@
 
 ## What is needed for Gitcoin funding (reference)
 
+**Full procedure:** [Gitcoin funding procedure](gitcoin-funding.en.md) ([日本語](gitcoin-funding.md)).
+
 - **Flow:** (1) Create project (grant page) on Builder → (2) Apply to a round on Explorer (gas required).
 - **Prepare:** Wallet (gas), logo 300×300 px, banner 1500×500 px, copy (problem, solution, funding plans, team), Twitter/X and public GitHub verification.
 - **Eligibility (summary):** Open source, permissive license (this project: Apache-2.0 OK); development activity (e.g. first commit 90+ days ago, recent commit, 3+ of the criteria). Prohibited: hate, fraud, Sybil, quid-pro-quo, legal violations.
