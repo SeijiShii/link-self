@@ -1,0 +1,38 @@
+{
+  "name": "link-self-chat-client",
+  "version": "0.1.0",
+  "description": "LINE-like chat client using LinkSelf P2P infrastructure",
+  "main": "dist/main.js",
+  "scripts": {
+    "predev": "tsc -p tsconfig.node.json",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc && vite build",
+    "build:daemon": "cd ../core/cmd/linkself-daemon && go build -o ../../../chat-client/build/linkself-daemon.exe main.go",
+    "preview": "vite preview",
+    "electron": "electron ."
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "typescript",
+    "p2p",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
