@@ -78,7 +78,7 @@ link-self/
     │   ├── node/            # ノード = Host + DHT + Auth + Store の組み立て
     │   └── storeforward/   # メッセージキューとオンライン検知時の送信
     ├── pkg/                 # 必要なら外部公開用（Phase 1 では未使用）
-    ├── cmd/linkself/        # CLI 用（Phase 1 では未実装）
+    ├── cmd/linkself/        # サンプルアプリ用エントリ（チャット＋ファイル共有、未実装）
     └── test/integration/    # ローカル多ノード統合テスト
 ```
 

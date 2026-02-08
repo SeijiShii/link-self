@@ -19,12 +19,14 @@
   - [補足（DHT・ノード・悪意あるアプローチ）](#補足要点だけ)
   - [まとめ：何がすごいのか](#まとめ何がすごいのか)
 - [Technical Approach（技術の要点）](#technical-approach)
+- [Open Source（オープンソース）](#oss)
+- [Support / Donate（寄付）](#donate)
 - [Roadmap（ロードマップ）](#roadmap)
 - Phase 1 設計・実装方針: [日本語](phase1-design.md) | [English](phase1-design.en.md)（実装済みコアの設計ドキュメント）
 - グループの概念: [日本語](group-concept.md) | [English](group-concept.en.md)（グループ・オーナー・脱退・権限の扱い）
 - 分散ネットワーク DB 化計画: [日本語](sync-db-plan.md) | [English](sync-db-plan.en.md)（アプリからネットワークを DB として扱う設計）
 - グループ・同期 DB 実装: [日本語](group-syncdb-implementation.md) | [English](group-syncdb-implementation.en.md)（実装・テストのドキュメント）
-- サンプルチャットアプリ計画: [日本語](sample-chat-app-plan.md) | [English](sample-chat-app-plan.en.md)（グループ API を用いたサンプルアプリの設計）
+- サンプルアプリ計画（チャット＋ファイル共有）: [日本語](sample-chat-app-plan.md) | [English](sample-chat-app-plan.en.md)（LinkSelf をインフラとして使う本格サンプルアプリの設計）
 - [Getting Started（開発の始め方）](#getting-started)
 
 ---
@@ -823,6 +825,18 @@ LinkSelfでも、これと同様の方法を取ります。
 - **Cross-Platform** … Goコア + Flutter（Android / iOS / Windows）。
 - **Local-first Sync** … Store-and-Forward。相手がオンラインになったら同期。
 
+<a id="oss"></a>
+## Open Source（オープンソース）
+
+本プロジェクトは **オープンソース**（Apache-2.0）であり、貢献を歓迎します。
+
+<a id="donate"></a>
+## Support / Donate（寄付）
+
+**Gitcoin Grants** でプロジェクトを登録し寄付を募る予定です。寄付で開発を支援できます。（URL は準備でき次第追記）
+
+---
+
 <a id="roadmap"></a>
 ## 🚀 Roadmap (ロードマップ)
 
@@ -832,7 +846,8 @@ LinkSelfでも、これと同様の方法を取ります。
     - 詳細: [Phase 1 設計・実装方針](phase1-design.md)、[core/README.md](../core/README.md)
 - [ ] **Phase 2: インフラモジュール**
     - インフラモジュールの整備 (Infrastructure module)
-    - サンプルアプリ：チャット、ファイル共有 (Sample apps: chat, file sharing)
+    - **1 本の本格サンプルアプリ**（チャット＋ファイル共有）が **LinkSelf をインフラとして使用**。グループ情報等は LinkSelf 側の DB に保存。(One full-featured sample app (chat + file sharing) uses LinkSelf as infrastructure; group info etc. in LinkSelf's DB.)
+    - 他アプリから LinkSelf をライブラリとして使う道筋の整備 (Path for using LinkSelf as a library: public API, packaging, docs)
 - [ ] **Phase 3: 各種プラットフォームへの展開**
     - PC (Desktop)
     - Android

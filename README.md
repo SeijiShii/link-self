@@ -54,12 +54,24 @@ Central servers are convenient (login, sync, always-on) but they **know everythi
 
 ---
 
+## Open Source | オープンソース
+
+This project is **open source** (Apache-2.0) and welcomes contributions.  
+本プロジェクトは **オープンソース**（Apache-2.0）であり、貢献を歓迎します。
+
+## Support / Donate | 寄付
+
+We plan to register the project on **Gitcoin Grants** to accept donations. Your support helps sustain development.  
+**Gitcoin Grants** でプロジェクトを登録し寄付を募る予定です。寄付で開発を支援できます。（URL は準備でき次第追記）
+
+---
+
 ## Roadmap | ロードマップ
 
-- [ ] **Phase 1: Core logic** — Define and implement; run multiple nodes locally, cover various test cases.  
-  **Phase 1: コアロジック** — 定義・実装。ローカルで複数ノードを立ち上げ、様々なテストケースを網羅。
-- [ ] **Phase 2: Infrastructure** — Infrastructure module; sample apps (chat, file sharing).  
-  **Phase 2: インフラモジュール** — インフラモジュール整備。サンプルアプリ（チャット、ファイル共有）。
+- [x] **Phase 1: Core logic** — Define and implement; run multiple nodes locally, cover various test cases. **Done.**  
+  **Phase 1: コアロジック** — 定義・実装。ローカルで複数ノードを立ち上げ、様々なテストケースを網羅。**完了。**
+- [ ] **Phase 2: Infrastructure** — Infrastructure module; one full-featured sample app (chat + P2P file sharing) that uses LinkSelf as infrastructure; path for using LinkSelf as a library.  
+  **Phase 2: インフラモジュール** — インフラモジュール整備。LinkSelf をインフラとして使う 1 本の本格サンプルアプリ（チャット＋ファイル共有）。他アプリから LinkSelf をライブラリとして使う道筋の整備。
 - [ ] **Phase 3: Platforms** — PC, Android, iOS.  
   **Phase 3: プラットフォーム** — PC、Android、iOS。
 

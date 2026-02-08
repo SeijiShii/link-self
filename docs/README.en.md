@@ -70,10 +70,20 @@ No central server ever appears: DIDs are generated on your device, connections a
 
 ---
 
+## Open Source
+
+This project is **open source** (Apache-2.0) and welcomes contributions.
+
+## Support / Donate
+
+We plan to register the project on **Gitcoin Grants** to accept donations. Your support helps sustain development. (URL to be added when the grant page is ready.)
+
+---
+
 ## Roadmap
 
-- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design](phase1-design.en.md) ([日本語](phase1-design.md)) and [core/README.md](../core/README.md). Related: [Group concept](group-concept.en.md) ([日本語](group-concept.md)), [Sync DB plan](sync-db-plan.en.md) ([日本語](sync-db-plan.md)), [Group and Sync DB implementation](group-syncdb-implementation.en.md) ([日本語](group-syncdb-implementation.md)), [Sample chat app plan](sample-chat-app-plan.en.md) ([日本語](sample-chat-app-plan.md)).
-- [ ] **Phase 2: Infrastructure** — Infrastructure module; sample apps (chat, file sharing).
+- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design](phase1-design.en.md) ([日本語](phase1-design.md)) and [core/README.md](../core/README.md). Related: [Group concept](group-concept.en.md) ([日本語](group-concept.md)), [Sync DB plan](sync-db-plan.en.md) ([日本語](sync-db-plan.md)), [Group and Sync DB implementation](group-syncdb-implementation.en.md) ([日本語](group-syncdb-implementation.md)), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md) ([日本語](sample-chat-app-plan.md)).
+- [ ] **Phase 2: Infrastructure** — Infrastructure module; one full-featured sample app (chat + P2P file sharing) that **uses LinkSelf as infrastructure**; group info etc. stored in LinkSelf's DB; **path for using LinkSelf as a library** (public API, packaging, docs).
 - [ ] **Phase 3: Platforms** — PC (desktop), Android, iOS.
 
 ---

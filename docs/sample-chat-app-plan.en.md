@@ -1,15 +1,22 @@
-# Sample chat app implementation plan
+# Sample app plan (chat + file sharing)
 
 **English** (this page) | [日本語](sample-chat-app-plan.md)  
 **Status:** Not yet implemented (plan only, stored in docs)  
-**Summary:** Design and implementation for a simple sample chat app using the core Node API (group-based), running multiple nodes as multiple processes (multiple terminals) on one PC.  
-**See also:** [Group concept](group-concept.en.md), [Phase 1 design](phase1-design.en.md)
+**Summary:** Design for one full-featured sample app that **uses LinkSelf as infrastructure**: group/1-to-1 chat and P2P file sharing. Group info, contacts, sync meta, etc. are stored in **LinkSelf's DB**; the app uses LinkSelf's API.  
+**See also:** [Group concept](group-concept.en.md), [Phase 1 design](phase1-design.en.md), [Roadmap](README.en.md#roadmap)
+
+---
+
+## Role and data
+
+- **One app, LinkSelf as infrastructure:** The sample app is **one application** that embeds LinkSelf as a library and uses it as the P2P infrastructure. It is the first concrete example of "using LinkSelf from another app."
+- **Data in LinkSelf's DB:** **Group info, contacts, sync metadata**, and similar data are stored in **LinkSelf's store (DB)**. The app reads and updates them via LinkSelf's API (e.g. group.Store, SyncLayer). The app does not hold a separate copy of group membership; it relies on LinkSelf.
 
 ---
 
 ## Conclusion
 
-- **Simple sample chat app:** Feasible. Use core Node API (`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`). Treat 1-to-1 as a **2-person group** ([Group concept](group-concept.en.md)).
+- **Full-featured sample app (chat + file sharing):** Feasible. One app uses core Node API (`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`) and SyncLayer/RecordStorage as provided by LinkSelf. Treat 1-to-1 as a **2-person group** ([Group concept](group-concept.en.md)).
 - **Multiple nodes on one PC:** Possible. **One process = one node**; run the same binary multiple times (multiple terminals) on the same PC to simulate multiple nodes. Integration tests [core/test/integration/integration_test.go](../core/test/integration/integration_test.go) already run multiple nodes (different ports) on the same host and verify DHT, auth, and messages.
 
 ---
@@ -26,7 +33,7 @@
 
 ### Placement
 
-- **Phase 1 design** marks `core/cmd/linkself/` as “CLI (not implemented).” Put the sample chat entry point in **`core/cmd/linkself/`** (one binary that starts a “chat node”).
+- **Phase 1 design** marks `core/cmd/linkself/` as the sample app entry (chat + file sharing, not yet implemented). Put the sample app entry point in **`core/cmd/linkself/`** (one binary that embeds LinkSelf and provides chat + file sharing).
 
 ### Minimal features
 
@@ -39,6 +46,11 @@
 | Receive | Print payload received via `SetOnMessage` to stdout (plain string or simple JSON). |
 | Send | Interactively enter “group (member DID list)” and “body” → `ConnectToGroup(ctx, memberDIDs)` for auth and flush, then `SendToGroup(ctx, memberDIDs, []byte(text))`. For 2-person chat use 2-person group `[myDID, peerDID]`. |
 | Exit | Call `Close()` then exit process. |
+
+### File sharing (scope)
+
+- **In scope:** P2P file send/receive or group-based file sharing (e.g. shared folder sync). File metadata (name, size, hash, chunk IDs) can be shared via SyncLayer; chunk payload via a separate protocol (e.g. Node stream). Details (chunk size, retry, partial fetch) to be decided at implementation time.
+- **Features to add:** File send, receive, list, delete; offline queue for file chunks.
 
 ### Message format
 
@@ -75,9 +87,10 @@
 
 ## Summary
 
-- A **sample chat app** is implementable with the core only. Send/receive is **group-based** (SendToGroup / ConnectToGroup); 1-to-1 is a 2-person group.
+- **One full-featured sample app** (chat + file sharing) uses **LinkSelf as infrastructure**. Group info, contacts, sync meta are stored in **LinkSelf's DB**; the app uses LinkSelf's API.
+- Send/receive is **group-based** (SendToGroup / ConnectToGroup); 1-to-1 is a 2-person group.
 - **Multiple nodes on one PC** is done by running the same binary in multiple processes (multiple terminals) and connecting via bootstrap.
-- Implementation scope: one entry point + interactive loop + identity persistence + group management + short documentation.
+- Implementation scope: one entry point + chat + file sharing + identity persistence + group management (via LinkSelf) + short documentation. GUI (Web / desktop / TUI) to be decided at implementation time.
 
 ## Related documents
 

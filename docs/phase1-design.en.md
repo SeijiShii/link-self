@@ -57,7 +57,7 @@ link-self/
     │   ├── syncdb/          # sync layer (RecordStorage, SyncLayer)
     │   └── storeforward/   # message queue and send on peer online
     ├── pkg/                 # optional public API (unused in Phase 1)
-    ├── cmd/linkself/        # CLI (not yet implemented)
+    ├── cmd/linkself/        # Sample app entry (chat + file sharing, not yet implemented)
     └── test/integration/    # local multi-node tests
 ```
 
