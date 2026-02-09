@@ -32,8 +32,10 @@ body {
   color: white;
   padding: 12px 20px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -42,8 +44,20 @@ body {
   font-weight: 600;
 }
 
+.app-profile {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  margin-right: 8px;
+}
+
 .my-did {
   font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .my-did code {
@@ -53,17 +67,147 @@ body {
   font-family: 'Courier New', monospace;
 }
 
+.btn-copy-did {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: transparent;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-copy-did:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-copy-did .icon-copy {
+  width: 14px;
+  height: 14px;
+}
+
+.listen-addr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.listen-addr-label {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.listen-addr-value {
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid #e0e0e0;
+  overflow: hidden;
+}
+
+/* Pending friend requests */
+.pending-requests {
+  background-color: #fff9e6;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.pending-requests-header {
+  padding: 8px 16px;
+}
+
+.pending-requests-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pending-requests-list {
+  list-style: none;
+  padding: 0 8px 8px;
+  margin: 0;
+}
+
+.pending-request-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.pending-request-did {
+  font-size: 12px;
+  font-family: monospace;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.pending-request-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-accept {
+  padding: 4px 10px;
+  font-size: 12px;
+  background-color: #3FA09C;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-accept:hover {
+  background-color: #2d8a86;
+}
+
+.btn-reject {
+  padding: 4px 10px;
+  font-size: 12px;
+  background-color: #e0e0e0;
+  color: #555;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-reject:hover {
+  background-color: #d0d0d0;
+}
+
 /* Contact List */
 .contact-list {
-  width: 300px;
+  flex: 1;
   background-color: white;
-  border-right: 1px solid #e0e0e0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -72,11 +216,128 @@ body {
 .contact-list-header {
   padding: 16px;
   border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .contact-list-header h2 {
   font-size: 18px;
   font-weight: 600;
+  flex: 1;
+}
+
+.btn-add-contact {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #3FA09C;
+  background: white;
+  color: #3FA09C;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-add-contact:hover {
+  background: #3FA09C;
+  color: white;
+}
+
+/* Add friend modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  min-width: 320px;
+  max-width: 90vw;
+}
+
+.modal-content h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.modal-hint {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: #3FA09C;
+}
+
+.modal-error {
+  font-size: 12px;
+  color: #c00;
+  margin-bottom: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  font-size: 14px;
+  background: #e0e0e0;
+  color: #555;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #d0d0d0;
+}
+
+.btn-send-request {
+  padding: 8px 16px;
+  font-size: 14px;
+  background: #3FA09C;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-send-request:hover:not(:disabled) {
+  background: #2d8a86;
+}
+
+.btn-send-request:disabled,
+.btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .contact-list-empty {

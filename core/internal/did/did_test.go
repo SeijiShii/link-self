@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func TestGenerate(t *testing.T) {
@@ -102,5 +103,34 @@ func TestSamePrivateKeySameDID(t *testing.T) {
 	}
 	if id1.DID != didFromPub {
 		t.Errorf("DID from Identity vs PubKey: %q vs %q", id1.DID, didFromPub)
+	}
+}
+
+func TestDIDToPeerID(t *testing.T) {
+	id, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := DIDToPeerID(id.DID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := peer.IDFromPublicKey(id.PubKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != expected {
+		t.Errorf("DIDToPeerID %q: got %s, want %s", id.DID, pid, expected)
+	}
+}
+
+func TestDIDToPeerID_Invalid(t *testing.T) {
+	_, err := DIDToPeerID("not-a-did")
+	if err == nil {
+		t.Fatal("expected error for invalid DID")
+	}
+	_, err = DIDToPeerID("")
+	if err == nil {
+		t.Fatal("expected error for empty DID")
 	}
 }

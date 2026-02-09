@@ -9,7 +9,9 @@
     "build": "tsc && vite build",
     "build:daemon": "cd ../core/cmd/linkself-daemon && go build -o ../../../chat-client/build/linkself-daemon.exe main.go",
     "preview": "vite preview",
-    "electron": "electron ."
+    "electron": "electron .",
+    "dev:userA": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --user-data-dir=./data/userA\"",
+    "electron:userB": "npm run predev && electron . --user-data-dir=./data/userB"
   },
   "keywords": [
     "electron",

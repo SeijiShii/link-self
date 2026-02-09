@@ -13,10 +13,16 @@ export interface Contact {
   lastMessageTime?: Date;
 }
 
+export interface FriendRequest {
+  fromDID: string;
+  receivedAt: number;
+}
+
 export interface ChatState {
   myDID: string | null;
   currentContact: Contact | null;
   messages: Message[];
   contacts: Contact[];
+  friendRequests: FriendRequest[];
   isConnected: boolean;
 }

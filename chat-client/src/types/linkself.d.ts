@@ -29,6 +29,7 @@ export interface StartParams {
   listenAddrs?: string[];
   bootstrapPeers?: string[];
   identityPath?: string;
+  usePublicDHT?: boolean;
 }
 
 export interface StartResult {
@@ -63,8 +64,38 @@ export interface LinkSelfAPI {
   onMessage(callback: (peerDID: string, payload: string) => void): void;
 }
 
+export interface ContactRecord {
+  did: string;
+  name?: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+}
+
+export interface FriendRequestRecord {
+  fromDID: string;
+  receivedAt: number;
+}
+
+export interface ContactsAPI {
+  get(): Promise<ContactRecord[]>;
+  add(contact: ContactRecord): Promise<ContactRecord[]>;
+}
+
+export interface FriendRequestsAPI {
+  get(): Promise<FriendRequestRecord[]>;
+  add(req: FriendRequestRecord): Promise<FriendRequestRecord[]>;
+  remove(fromDID: string): Promise<FriendRequestRecord[]>;
+}
+
+export interface AppAPI {
+  getProfile(): Promise<string>;
+}
+
 declare global {
   interface Window {
     linkself: LinkSelfAPI;
+    contacts: ContactsAPI;
+    friendRequests: FriendRequestsAPI;
+    app: AppAPI;
   }
 }

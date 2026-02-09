@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multibase"
 )
 
@@ -110,6 +111,15 @@ func ParseToPubKey(did string) (crypto.PubKey, error) {
 		return nil, err
 	}
 	return crypto.UnmarshalEd25519PublicKey(raw)
+}
+
+// DIDToPeerID converts a did:key string to a libp2p peer.ID (for use with public DHT FindPeer).
+func DIDToPeerID(did string) (peer.ID, error) {
+	pub, err := ParseToPubKey(did)
+	if err != nil {
+		return "", err
+	}
+	return peer.IDFromPublicKey(pub)
 }
 
 // DIDToPeerIDKey returns a stable byte key for DHT (SHA256 of DID string).

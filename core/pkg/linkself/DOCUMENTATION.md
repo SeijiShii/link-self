@@ -38,9 +38,35 @@ https://pkg.go.dev/github.com/SeijiShii/link-self/core/pkg/linkself
    go get github.com/SeijiShii/link-self/core/pkg/linkself@latest
    ```
 
+### 更新タイミング
+
+**重要**: pkg.go.devは**即座には更新されません**。以下の点に注意してください：
+
+1. **新しいバージョンが必要**: godocコメントを変更した場合、新しいバージョンタグをリリースする必要があります
+   ```bash
+   git tag v0.1.1  # パッチバージョンを上げる
+   git push origin v0.1.1
+   ```
+
+2. **更新の遅延**: pkg.go.devの更新には**数時間から数日**かかる場合があります
+   - 通常は数時間以内に更新されますが、場合によっては数日かかることもあります
+   - 即座に更新される保証はありません
+
+3. **更新を促進する方法**:
+   - `go get`コマンドを実行すると、更新が早まる可能性があります：
+     ```bash
+     go get github.com/SeijiShii/link-self/core/pkg/linkself@v0.1.1
+     ```
+   - pkg.go.devのページにアクセスして「Request」ボタンをクリック（初回公開時のみ有効）
+
+4. **開発中の確認**: 開発中は、ローカルの`go doc`コマンドで確認することを推奨します：
+   ```bash
+   go doc github.com/SeijiShii/link-self/core/pkg/linkself
+   ```
+
 ### メリット
 
-- ✅ **自動更新**: 新しいバージョンがリリースされると自動的に更新される
+- ✅ **自動更新**: 新しいバージョンがリリースされると自動的に更新される（数時間〜数日の遅延あり）
 - ✅ **検索可能**: Go開発者がパッケージを検索できる
 - ✅ **標準的**: Goコミュニティで標準的な方法
 - ✅ **無料**: 完全に無料で利用可能
@@ -144,6 +170,47 @@ godoc -url /pkg/github.com/SeijiShii/link-self/core/pkg/linkself > docs.html
 
 公開後、以下のURLでアクセス可能になります：
 - https://pkg.go.dev/github.com/SeijiShii/link-self/core/pkg/linkself
+
+## よくある質問
+
+### Q: godocコメントを変更したら、いつpkg.go.devに反映されますか？
+
+A: 以下の手順が必要です：
+
+1. **変更をコミット・プッシュ**
+   ```bash
+   git add .
+   git commit -m "Update godoc comments"
+   git push
+   ```
+
+2. **新しいバージョンタグを作成**
+   ```bash
+   git tag v0.1.1  # セマンティックバージョニングに従う
+   git push origin v0.1.1
+   ```
+
+3. **数時間〜数日待つ**
+   - pkg.go.devは自動的に新しいバージョンをインデックスします
+   - 通常は数時間以内ですが、最大で数日かかる場合もあります
+
+4. **確認**
+   - https://pkg.go.dev/github.com/SeijiShii/link-self/core/pkg/linkself にアクセス
+   - バージョンセレクターで新しいバージョンを選択
+
+### Q: 即座に更新する方法はありますか？
+
+A: **即座に更新する方法はありません**。pkg.go.devには「Refresh now」ボタンはありません。ただし、以下の方法で更新を促進できる可能性があります：
+
+- `go get`コマンドを実行：
+  ```bash
+  go get github.com/SeijiShii/link-self/core/pkg/linkself@v0.1.1
+  ```
+- 開発中はローカルの`go doc`を使用することを推奨します
+
+### Q: 同じバージョンでgodocだけ変更したい場合は？
+
+A: **新しいバージョンタグが必要です**。pkg.go.devはバージョンごとにドキュメントを保持するため、同じバージョンタグで変更を反映することはできません。パッチバージョンを上げてください（例: v0.1.0 → v0.1.1）。
 
 ## 参考リンク
 

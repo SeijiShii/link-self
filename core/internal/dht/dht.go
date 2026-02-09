@@ -78,6 +78,12 @@ func DIDKey(didStr string) string {
 
 // PutDID stores the peer AddrInfo for the given DID in the DHT.
 func PutDID(ctx context.Context, r routing.ValueStore, didStr string, info peer.AddrInfo) error {
+	if didStr == "" {
+		return fmt.Errorf("DID must not be empty")
+	}
+	if err := info.ID.Validate(); err != nil {
+		return fmt.Errorf("invalid AddrInfo: %w", err)
+	}
 	data, err := json.Marshal(info)
 	if err != nil {
 		return err
@@ -88,6 +94,9 @@ func PutDID(ctx context.Context, r routing.ValueStore, didStr string, info peer.
 
 // FindDID looks up the peer AddrInfo for the given DID in the DHT.
 func FindDID(ctx context.Context, r routing.ValueStore, didStr string) (peer.AddrInfo, error) {
+	if didStr == "" {
+		return peer.AddrInfo{}, fmt.Errorf("DID must not be empty")
+	}
 	key := DIDKey(didStr)
 	val, err := r.GetValue(ctx, key)
 	if err != nil {

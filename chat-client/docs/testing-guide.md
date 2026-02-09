@@ -161,14 +161,16 @@ npm install
 
 3. **Goモジュールのダウンロード**:
    ```bash
-   cd daemon
+   cd core
    go mod tidy
    ```
 
-4. **手動ビルド**:
+4. **手動ビルド**（daemon は core 内）:
    ```bash
-   go build -o ../build/linkself-daemon.exe main.go
+   cd core/cmd/linkself-daemon
+   go build -o ../../../chat-client/build/linkself-daemon.exe main.go
    ```
+   通常は `npm run build:daemon`（chat-client ルートで）を使用してください。
 
 **エラーメッセージ例**:
 ```

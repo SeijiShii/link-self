@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { StartParams, StartResult, SendMessageParams, ConnectParams } from '../../types/linkself';
+import type { StartParams, StartResult } from '../../types/linkself';
 
 interface UseLinkSelfReturn {
   myDID: string | null;
+  listenAddr: string | null;
   isConnected: boolean;
   start: (params: StartParams) => Promise<void>;
   stop: () => Promise<void>;
@@ -13,6 +14,7 @@ interface UseLinkSelfReturn {
 
 export function useLinkSelf(): UseLinkSelfReturn {
   const [myDID, setMyDID] = useState<string | null>(null);
+  const [listenAddr, setListenAddr] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   const start = useCallback(async (params: StartParams) => {
@@ -22,6 +24,7 @@ export function useLinkSelf(): UseLinkSelfReturn {
     try {
       const result = await window.linkself.start(params) as StartResult;
       setMyDID(result.did);
+      setListenAddr(result.listenAddr ?? null);
       setIsConnected(true);
     } catch (error) {
       console.error('Failed to start LinkSelf:', error);
@@ -96,6 +99,7 @@ export function useLinkSelf(): UseLinkSelfReturn {
 
   return {
     myDID,
+    listenAddr,
     isConnected,
     start,
     stop,

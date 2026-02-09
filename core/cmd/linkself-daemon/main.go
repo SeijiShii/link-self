@@ -37,9 +37,10 @@ type JSONRPCNotification struct {
 }
 
 type StartParams struct {
-	ListenAddrs   []string `json:"listenAddrs,omitempty"`
+	ListenAddrs    []string `json:"listenAddrs,omitempty"`
 	BootstrapPeers []string `json:"bootstrapPeers,omitempty"`
-	IdentityPath  string   `json:"identityPath,omitempty"`
+	IdentityPath   string   `json:"identityPath,omitempty"`
+	UsePublicDHT   bool     `json:"usePublicDHT,omitempty"`
 }
 
 type StartResult struct {
@@ -133,9 +134,10 @@ func handleStart(req *JSONRPCRequest) {
 
 	// Configure using public API
 	config := linkself.Config{
-		IdentityPath:  params.IdentityPath,
-		ListenAddrs:   params.ListenAddrs,
+		IdentityPath:   params.IdentityPath,
+		ListenAddrs:    params.ListenAddrs,
 		BootstrapPeers: params.BootstrapPeers,
+		UsePublicDHT:   params.UsePublicDHT,
 	}
 
 	// Start node using public API

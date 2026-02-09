@@ -71,7 +71,7 @@ chat-client/
 
 ## テスト動作
 
-詳細なテスト動作手順は [docs/testing-guide.md](docs/testing-guide.md) を参照してください。
+**テスト動作させたいとき**は [docs/entry-point.md](docs/entry-point.md) を起点に手順を進めてください。詳細は [docs/testing-guide.md](docs/testing-guide.md) を参照。
 
 ### クイックスタート
 
@@ -94,5 +94,7 @@ npm run dev
 
 ## ドキュメント
 
+- [テスト動作のエントリポイント](docs/entry-point.md) — テスト動作させたいときはここから
 - [実装計画](docs/implementation-plan.md)
 - [テスト動作ガイド](docs/testing-guide.md)
+- [友達追加・申請承認・複数インスタンス](docs/friend-add-and-multi-instance.md)

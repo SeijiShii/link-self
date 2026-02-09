@@ -75,6 +75,7 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		Identity:       identity,
 		ListenAddrs:    listenAddrs,
 		BootstrapPeers: bootstrapPeers,
+		UsePublicDHT:   config.UsePublicDHT,
 	}
 
 	n, err := node.New(ctx, cfg)

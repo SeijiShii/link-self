@@ -7,6 +7,76 @@ import type { JSONRPCRequest, JSONRPCResponse, JSONRPCNotification, StartParams,
 // Disable hardware acceleration for Linux compatibility
 app.disableHardwareAcceleration();
 
+// User data paths (per-instance when using --user-data-dir)
+function getUserDataPaths() {
+  const userData = app.getPath('userData');
+  const identityPath = path.resolve(userData, 'identity.json');
+  return {
+    userData,
+    contactsPath: path.join(userData, 'contacts.json'),
+    friendRequestsPath: path.join(userData, 'friend-requests.json'),
+    identityPath,
+  };
+}
+
+// どのプロファイル（userA / userB / default）で動いているか。2インスタンス時に別DIDか確認する目安。
+function getAppProfile(): string {
+  const userData = app.getPath('userData');
+  const normalized = path.normalize(userData);
+  if (normalized.includes('userA')) return 'userA';
+  if (normalized.includes('userB')) return 'userB';
+  return 'default';
+}
+
+// Contact shape for persistence (lastMessageTime as ISO string)
+interface ContactRecord {
+  did: string;
+  name?: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+}
+
+interface FriendRequestRecord {
+  fromDID: string;
+  receivedAt: number;
+}
+
+function readContacts(): ContactRecord[] {
+  try {
+    const { contactsPath } = getUserDataPaths();
+    const data = fs.readFileSync(contactsPath, 'utf-8');
+    return JSON.parse(data) as ContactRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function writeContacts(contacts: ContactRecord[]): void {
+  const { contactsPath, userData } = getUserDataPaths();
+  if (!fs.existsSync(userData)) {
+    fs.mkdirSync(userData, { recursive: true });
+  }
+  fs.writeFileSync(contactsPath, JSON.stringify(contacts, null, 2), 'utf-8');
+}
+
+function readFriendRequests(): FriendRequestRecord[] {
+  try {
+    const { friendRequestsPath } = getUserDataPaths();
+    const data = fs.readFileSync(friendRequestsPath, 'utf-8');
+    return JSON.parse(data) as FriendRequestRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function writeFriendRequests(requests: FriendRequestRecord[]): void {
+  const { friendRequestsPath, userData } = getUserDataPaths();
+  if (!fs.existsSync(userData)) {
+    fs.mkdirSync(userData, { recursive: true });
+  }
+  fs.writeFileSync(friendRequestsPath, JSON.stringify(requests, null, 2), 'utf-8');
+}
+
 let mainWindow: BrowserWindow | null = null;
 let daemonProcess: ChildProcess | null = null;
 let requestIdCounter = 0;
@@ -69,6 +139,18 @@ function createWindow() {
       errorDescription,
       url: validatedURL,
     });
+    // electron:userB 単体起動時など、Vite が動いていないと白画面になる。案内を表示する。
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    if (isDev && validatedURL && validatedURL.startsWith('http://localhost:5173')) {
+      const msg = [
+        '<h2>Vite が起動していません</h2>',
+        '<p>electron:userB は、Vite が <code>http://localhost:5173</code> で動いている必要があります。</p>',
+        '<p><strong>手順:</strong></p>',
+        '<ol><li>ターミナル 1 で <code>npm run dev:userA</code> を先に実行する</li>',
+        '<li>Vite が起動したら、ターミナル 2 で <code>npm run electron:userB</code> を実行する</li></ol>',
+      ].join('');
+      mainWindow?.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:2rem;max-width:480px;">' + msg + '</body></html>'));
+    }
   });
 
   mainWindow.webContents.on('dom-ready', () => {
@@ -211,11 +293,73 @@ app.on('before-quit', async () => {
   await stopDaemon();
 });
 
-// IPC handlers
+// IPC handlers: contacts
+ipcMain.handle('contacts:get', () => {
+  return readContacts();
+});
+
+ipcMain.handle('contacts:add', (_event, contact: ContactRecord) => {
+  const contacts = readContacts();
+  if (contacts.some((c) => c.did === contact.did)) {
+    throw new Error('Already in contacts');
+  }
+  contacts.push(contact);
+  writeContacts(contacts);
+  return contacts;
+});
+
+// IPC handlers: friend requests
+ipcMain.handle('friendRequests:get', () => {
+  return readFriendRequests();
+});
+
+ipcMain.handle('friendRequests:add', (_event, req: FriendRequestRecord) => {
+  const requests = readFriendRequests();
+  if (requests.some((r) => r.fromDID === req.fromDID)) {
+    return requests;
+  }
+  requests.push(req);
+  writeFriendRequests(requests);
+  return requests;
+});
+
+ipcMain.handle('friendRequests:remove', (_event, fromDID: string) => {
+  const requests = readFriendRequests().filter((r) => r.fromDID !== fromDID);
+  writeFriendRequests(requests);
+  return requests;
+});
+
+// IPC handlers: app (profile for multi-instance)
+ipcMain.handle('app:getProfile', () => getAppProfile());
+
+// 公開DHT用のデフォルト bootstrap（libp2p の bootstrap.libp2p.io）。検証環境・実運用とも同じDHTに参加する。
+const DEFAULT_PUBLIC_DHT_BOOTSTRAP_PEERS = [
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+];
+
+// IPC handlers: linkself (daemon)
 ipcMain.handle('linkself:start', async (_event, params: StartParams) => {
   try {
     await startDaemon();
-    const result = await sendRequest('start', params) as StartResult;
+    const { identityPath } = getUserDataPaths();
+    const mergedParams: StartParams = { ...params, identityPath };
+    // bootstrap: 環境変数で上書きしなければ公開DHTのデフォルトを使用（検証・実運用とも同じDHT）
+    const bootstrapPeer = process.env.BOOTSTRAP_PEER;
+    const bootstrapPeersEnv = process.env.BOOTSTRAP_PEERS;
+    const disablePublicDHT = process.env.DISABLE_PUBLIC_DHT === '1' || process.env.DISABLE_PUBLIC_DHT === 'true';
+    if (bootstrapPeer) {
+      mergedParams.bootstrapPeers = [bootstrapPeer.trim()];
+    } else if (bootstrapPeersEnv) {
+      mergedParams.bootstrapPeers = bootstrapPeersEnv.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (!disablePublicDHT) {
+      mergedParams.bootstrapPeers = [...DEFAULT_PUBLIC_DHT_BOOTSTRAP_PEERS];
+    }
+    mergedParams.usePublicDHT = process.env.USE_PUBLIC_DHT === '1' || process.env.USE_PUBLIC_DHT === 'true';
+    console.log('[LinkSelf] profile:', getAppProfile(), 'identityPath:', identityPath, 'bootstrapPeers:', mergedParams.bootstrapPeers?.length ?? 0, 'usePublicDHT:', mergedParams.usePublicDHT);
+    const result = await sendRequest('start', mergedParams) as StartResult;
     return result;
   } catch (error) {
     console.error('Failed to start daemon:', error);

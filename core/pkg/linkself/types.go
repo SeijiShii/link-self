@@ -78,6 +78,10 @@ type Config struct {
 	//
 	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	BootstrapPeers []string
+
+	// UsePublicDHT joins the public DHT (/ipfs) and discovers peers by PeerID (FindPeer) instead of PutDID/FindDID.
+	// Set true to use bootstrap.libp2p.io and allow DID-based connect without a LinkSelf bootstrap node.
+	UsePublicDHT bool
 }
 
 // NodeInfo contains information about a started node.
