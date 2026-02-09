@@ -1,3 +1,6 @@
+// これはリファクタリング後のdaemon実装の例です。
+// 実際の実装は main.go を更新してください。
+
 package main
 
 import (
@@ -7,9 +10,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SeijiShii/link-self/core/pkg/linkself"
+	"github.com/SeijiShii/link-self/core/pkg/linkself" // ✅ 公開APIのみに依存
 )
 
+// JSON-RPC関連の型定義（変更なし）
 type JSONRPCRequest struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Method  string      `json:"method"`
@@ -19,7 +23,7 @@ type JSONRPCRequest struct {
 
 type JSONRPCResponse struct {
 	JSONRPC string        `json:"jsonrpc"`
-	Result  interface{}  `json:"result,omitempty"`
+	Result  interface{}   `json:"result,omitempty"`
 	Error   *JSONRPCError `json:"error,omitempty"`
 	ID      interface{}   `json:"id"`
 }
@@ -36,6 +40,7 @@ type JSONRPCNotification struct {
 	Params  interface{} `json:"params,omitempty"`
 }
 
+// JSON-RPCパラメータ型（変更なし）
 type StartParams struct {
 	ListenAddrs   []string `json:"listenAddrs,omitempty"`
 	BootstrapPeers []string `json:"bootstrapPeers,omitempty"`
@@ -62,6 +67,7 @@ type MessageNotificationParams struct {
 }
 
 var (
+	// ✅ インターフェースに依存（実装詳細を隠蔽）
 	linkSelfClient linkself.Client
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -128,17 +134,15 @@ func handleStart(req *JSONRPCRequest) {
 		}
 	}
 
-	// Create client using public API
+	// ✅ 公開APIを使用
 	client := linkself.NewClient()
 
-	// Configure using public API
 	config := linkself.Config{
 		IdentityPath:  params.IdentityPath,
 		ListenAddrs:   params.ListenAddrs,
 		BootstrapPeers: params.BootstrapPeers,
 	}
 
-	// Start node using public API
 	info, err := client.Start(ctx, config)
 	if err != nil {
 		sendError(req.ID, -32000, "Failed to start", err.Error())
@@ -236,6 +240,7 @@ func handleConnect(req *JSONRPCRequest) {
 	sendResponse(req.ID, nil)
 }
 
+// JSON-RPC送信関数（変更なし）
 func sendResponse(id interface{}, result interface{}) {
 	resp := JSONRPCResponse{
 		JSONRPC: "2.0",

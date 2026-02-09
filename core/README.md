@@ -16,8 +16,21 @@ core/
 │   ├── node/              # ノード = Host + DHT + Auth + Store-and-Forward
 │   └── storeforward/      # メッセージキューとオンライン検知時の送信
 ├── pkg/
-└── cmd/linkself/
+│   └── linkself/          # 公開API（疎結合化のため作成）
+│       ├── types.go       # Clientインターフェースと型定義
+│       ├── client.go      # Client実装
+│       └── README.md      # APIドキュメント
+└── cmd/
+    └── linkself-daemon/   # JSON-RPC daemon（Electronアプリ用）
 ```
+
+## 公開API
+
+`pkg/linkself`パッケージは、LinkSelfコアライブラリの公開APIを提供します。
+
+- **ドキュメント**: [pkg/linkself/README.md](pkg/linkself/README.md)
+- **オンライン**: https://pkg.go.dev/github.com/SeijiShii/link-self/core/pkg/linkself（公開後）
+- **ローカル**: `go doc github.com/SeijiShii/link-self/core/pkg/linkself`
 
 ## DID ↔ DHT キー・メッセージ形式
 
