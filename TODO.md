@@ -34,9 +34,8 @@ link-self/
 │   └── test/integration/       # 多ノード統合テスト
 ├── chat-client/                # サンプルチャットアプリ（Electron + React + TypeScript）
 │   ├── src/                    # main / preload / renderer（React コンポーネント・hooks）
-│   ├── daemon/                 # ※旧 daemon（internal 直接依存、未使用）
 │   ├── build/                  # ビルド成果物（daemon は core からビルド）
-│   └── docs/                   # 実装計画・結合改善・テストガイド等
+│   └── docs/                   # 実装計画・結合改善・テストガイド・実装変更履歴等
 └── docs/                       # 全体設計・計画・多言語ドキュメント
     ├── README.ja.md, README.en.md
     ├── phase1-design.md        # Phase 1 設計（実装済み）
@@ -69,6 +68,7 @@ link-self/
 | internal: did, dht, auth, node, storeforward, group, syncdb | ✅ | Phase 1 実装済み |
 | pkg/linkself 公開 API | ✅ | Client, Config, NewClient, Start/Stop, SendMessage, Connect, SetOnMessage |
 | cmd/linkself-daemon | ✅ | JSON-RPC、**pkg/linkself のみに依存**（internal 直接依存なし） |
+| DHT | ✅ | 常に公開 DHT（/ipfs）。FindPeer(DIDToPeerID) で検索。UsePublicDHT は廃止 |
 | 統合テスト（test/integration） | ✅ | 多ノード DHT・認証・メッセージ・Store-and-Forward 検証 |
 | SendToGroup / ConnectToGroup | 🔲 計画 | 現状は SendMessage / Connect（1 対 1）。core/README に移行計画の記載あり |
 
@@ -77,13 +77,13 @@ link-self/
 | 項目 | 状態 | 備考 |
 |------|------|------|
 | Electron + React + TypeScript + Vite | ✅ | 基本構造・ビルド設定済み |
-| LINE ライク UI（ChatWindow, MessageList, MessageBubble, MessageInput, ContactList） | ✅ | モック表示まで |
+| LINE ライク UI（ChatWindow, MessageList, MessageBubble, MessageInput, ContactList, PendingRequests） | ✅ | 実装済み |
 | アプリ ↔ daemon 統合 | ✅ | main が core の linkself-daemon を起動、JSON-RPC で通信 |
-| 起動・DID 表示 | ✅ | 統合確認済み |
-| 友達追加機能 | 🔲 次に実装 | DID を入力して連絡先に追加する UI・永続化 |
-| 実際の P2P 送受信（UI から） | 🔲 後続 | 複数ノード間の実メッセージ送受信は未実装 |
+| 起動・DID 表示 | ✅ | DID のみ表示・コピー（Listen 表示は廃止） |
+| 友達追加機能 | ✅ | DID 入力・友達申請・承認/拒否・永続化（contacts.json, friend-requests.json） |
+| 実際の P2P 送受信（UI から） | ✅ | 1 対 1 メッセージ送受信（Connect は DHT のみ、DID 指定） |
 | 複数プラットフォーム | 🔲 後続 | 現状 Windows 優先（build:daemon が .exe 固定の可能性） |
-| daemon 配置 | ✅ | core/cmd/linkself-daemon（pkg/linkself のみ依存）。旧 chat-client/daemon は削除済み |
+| daemon 配置 | ✅ | core/cmd/linkself-daemon（pkg/linkself のみ依存） |
 
 ### 4.3 ドキュメント（docs/）
 
@@ -101,16 +101,18 @@ link-self/
 
 - **概要・ロードマップ**: [README.md](README.md)、[docs/README.ja.md](docs/README.ja.md)
 - **Core**: [core/README.md](core/README.md)、[core/pkg/linkself/README.md](core/pkg/linkself/README.md)
-- **設計・計画**: [docs/phase1-design.md](docs/phase1-design.md)、[docs/group-concept.md](docs/group-concept.md)、[docs/sample-chat-app-plan.md](docs/sample-chat-app-plan.md)、[docs/sync-db-plan.md](docs/sync-db-plan.md)
+- **設計・計画**: [docs/phase1-design.md](docs/phase1-design.md)、[docs/group-concept.md](docs/group-concept.md)、[docs/sample-chat-app-plan.md](docs/sample-chat-app-plan.md)、[docs/sync-db-plan.md](docs/sync-db-plan.md)、[docs/linkself-data-persistence-plan.md](docs/linkself-data-persistence-plan.md)
 - **チャットアプリ**: [chat-client/README.md](chat-client/README.md)、[chat-client/docs/implementation-plan.md](chat-client/docs/implementation-plan.md)、[chat-client/docs/testing-guide.md](chat-client/docs/testing-guide.md)
+- **テスト動作・現仕様**: [chat-client/docs/entry-point.md](chat-client/docs/entry-point.md)、[chat-client/docs/implementation-changes.md](chat-client/docs/implementation-changes.md)
 - **友達追加・申請承認・複数インスタンス**: [chat-client/docs/friend-add-and-multi-instance.md](chat-client/docs/friend-add-and-multi-instance.md)
 
 ---
 
 ## 6. 次の作業候補（リポジトリ全体）
 
-- [ ] **サンプルチャットアプリ: 友達追加機能** — DID を入力して連絡先に追加する UI と永続化を実装
-- [ ] **Phase 2 本格サンプルアプリ**: 実 P2P 送受信を UI で完了させ、必要に応じてファイル共有スコープを検討（sample-chat-app-plan に沿う）
+- [x] **サンプルチャットアプリ: 友達追加機能** — DID 入力・友達申請・承認/拒否・永続化は実装済み
+- [ ] **チャットクライアントを計画書に沿って作り変える** — [docs/linkself-data-persistence-plan.md](docs/linkself-data-persistence-plan.md) の内容に沿い、LinkSelf データルート／DID 空間・つながりの LinkSelf 内包・sync-db クライアント対応、DID 選択・アプリID 渡しなどに合わせて作り直す
+- [ ] **Phase 2 本格サンプルアプリ**: ファイル共有スコープの検討・実装（sample-chat-app-plan に沿う）。1 対 1 メッセージ送受信は動作済み
 - [ ] **Core API 進化**: SendToGroup / ConnectToGroup への移行（core/README 記載の計画）
 - [ ] **マルチプラットフォーム**: build:daemon のバイナリ名・パスを OS 別にし、chat-client の起動パスを拡張
 - [ ] **ドキュメント**: CONTRIBUTING.md / CODE_OF_CONDUCT.md の追加（任意）
@@ -118,4 +120,4 @@ link-self/
 
 ---
 
-*最終更新: リポジトリ全体を包含する形に改訂*
+*最終更新: 友達追加・P2P 送受信の実装済み反映、DHT/Listen 廃止の現仕様反映、参照ドキュメント追加*
