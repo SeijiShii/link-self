@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 - 各プロセスで `node.New` → `node.Start` で1ノードを起動。
-- 先に起動したノードの「Listen アドレス + PeerID」を、2台目以降の `BootstrapPeers` に渡す（統合テストと同様）。
+- 先に起動したノードのアドレス（Listen アドレス + PeerID）を、2台目以降の `BootstrapPeers` に渡す（統合テストと同様）。DHT は常に公開 DHT（/ipfs）を使用。
 - 同一マシンでは `ListenAddrs: ["/ip4/127.0.0.1/tcp/0"]` でポート自動割当にすれば、複数ノードが衝突しない。
 
 ---
@@ -74,7 +74,7 @@ flowchart LR
 ### 運用イメージ（1台PCで2ノード・2人グループ）
 
 1. **ターミナル1**: `go run ./cmd/linkself`（またはビルドした `linkself`）  
-   → 「My DID: did:key:...」「Listen: /ip4/127.0.0.1/tcp/4001/p2p/...」を表示。
+   → 「My DID: did:key:...」を表示。daemon の Start 結果では Listen アドレスも返るが、チャットクライアントでは DID のみ表示する。
 2. **ターミナル2**: `linkself --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PeerID>`  
    → 2台目が DHT に参加。ターミナル1の DID を「連絡先」に追加し、**2人グループ**（自分と相手の DID のリスト）を登録して `connectToGroup` してから `sendToGroup`。
 3. 両方で「相手 DID を登録 → 2人グループとして connectToGroup → sendToGroup」すれば双方向チャットになる。Store-and-Forward は既にコアが担当するため、オフライン送信もそのまま利用可能。
@@ -87,7 +87,7 @@ flowchart LR
    - フラグ: `--listen`, `--bootstrap`, `--identity`（identity ファイルパス）。
    - identity の生成・保存・読み込み（libp2p の鍵シリアライズまたは did.Identity を保持する簡易形式）。
    - `node.Config` に `ListenAddrs` と `BootstrapPeers`（`--bootstrap` から `peer.AddrInfo` を組み立て）を渡して `node.New` → `Start`。
-   - 起動時に「My DID」「Listen アドレス」を表示。
+   - 起動時に「My DID」を表示（Listen アドレスは daemon 結果に含まれるが、クライアント UI では DID のみ表示）。
 
 2. **対話ループ**
    - 標準入力からコマンドを読む（例: `add <DID>`, `group <DID>...` でグループ登録, `connectToGroup`, `sendToGroup <text>`, `list`, `quit`）。

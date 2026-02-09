@@ -10,12 +10,11 @@ interface ContactListProps {
   sendMessage: (peerDID: string, message: string) => Promise<void>;
 }
 
-/** コピーした結合形式（DID: did:key:... / Listen: ...）や生DIDから did:key:... を抽出 */
+/** 貼り付けテキストから DID のみ抽出（DID: 行や生 did:key:...） */
 function parseDIDFromPaste(text: string): string | null {
   const trimmed = text.trim();
-  const didPrefix = 'DID: ';
-  if (trimmed.startsWith(didPrefix)) {
-    const after = trimmed.slice(didPrefix.length);
+  if (trimmed.startsWith('DID:')) {
+    const after = trimmed.slice(4).trim();
     const firstLine = after.split(/\r?\n/)[0].trim();
     return firstLine.startsWith('did:key:') ? firstLine : null;
   }
@@ -37,17 +36,16 @@ export default function ContactList({
   const [sending, setSending] = useState(false);
 
   const handleSendFriendRequest = useCallback(async () => {
-    const parsed = parseDIDFromPaste(addDID);
+    const did = parseDIDFromPaste(addDID);
     setAddError(null);
     if (!addDID.trim()) {
       setAddError('DIDを入力してください');
       return;
     }
-    if (!parsed) {
-      setAddError('有効なDID（did:key:...）を入力してください。コピーした結合形式（DID: ... / Listen: ...）もそのまま貼り付けできます');
+    if (!did) {
+      setAddError('有効なDID（did:key:...）を入力してください');
       return;
     }
-    const did = parsed;
     if (myDID && did === myDID) {
       setAddError('自分のDIDは追加できません');
       return;
@@ -63,13 +61,7 @@ export default function ContactList({
       setShowAddModal(false);
       setAddDID('');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '送信に失敗しました';
-      const isConnectFailure = /connect|接続/i.test(msg);
-      setAddError(
-        isConnectFailure
-          ? '接続に失敗しました。相手側が、こちらのListenアドレスを BOOTSTRAP_PEER に指定して起動しているか確認してください。'
-          : msg
-      );
+      setAddError(e instanceof Error ? e.message : '送信に失敗しました');
     } finally {
       setSending(false);
     }
@@ -99,13 +91,13 @@ export default function ContactList({
             <input
               type="text"
               className="modal-input"
-              placeholder="did:key:... または DID: ... / Listen: ... を貼り付け"
+              placeholder="did:key:... を貼り付け"
               value={addDID}
               onChange={(e) => setAddDID(e.target.value)}
               onPaste={(e) => {
                 const pasted = e.clipboardData.getData('text');
                 const parsed = parseDIDFromPaste(pasted);
-                if (parsed && pasted.trim() !== parsed) {
+                if (parsed) {
                   e.preventDefault();
                   setAddDID(parsed);
                   setAddError(null);

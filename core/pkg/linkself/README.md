@@ -103,11 +103,15 @@ import "github.com/SeijiShii/link-self/core/pkg/linkself"
 
 - **Client**: LinkSelfノードと対話するためのインターフェース
 - **NewClient()**: 新しいクライアントを作成
-- **Config**: ノードの設定
+- **Config**: ノードの設定（ListenAddrs, BootstrapPeers 等）
 - **NodeInfo**: 起動したノードの情報
 - **MessageHandler**: メッセージ受信時のコールバック関数型
 
 詳細はgodocを参照してください。
+
+## DHT
+
+常に公開 DHT（`ProtocolPrefix("/ipfs")`）を使用します。FindPeer(DIDToPeerID(did)) で相手を検索します。BootstrapPeers で bootstrap.libp2p.io 等を指定して参加します。
 
 ## 使用例
 

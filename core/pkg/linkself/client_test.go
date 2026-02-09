@@ -123,7 +123,7 @@ func TestClientConnectWithoutStart(t *testing.T) {
 
 	client := NewClient()
 
-	err := client.Connect(ctx, "did:example:test")
+	err := client.Connect(ctx, "did:example:test", "")
 	if err == nil {
 		t.Error("Expected error when connecting without starting")
 	}

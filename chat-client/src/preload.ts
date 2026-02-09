@@ -4,7 +4,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 interface StartParams {
   listenAddrs?: string[];
   bootstrapPeers?: string[];
-  usePublicDHT?: boolean;
   identityPath?: string;
 }
 

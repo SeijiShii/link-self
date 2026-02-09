@@ -60,7 +60,7 @@ chat-client/
 │       ├── components/       # Reactコンポーネント
 │       ├── hooks/            # カスタムフック
 │       └── styles/           # CSS
-└── build/                    # ビルド成果物（daemonはcore/cmd/linkself-daemonからビルド）
+└── build/                    # ビルド成果物（daemon は core/cmd/linkself-daemon からビルド。chat-client 内に daemon ソースはない）
 ```
 
 ## 使用方法
@@ -91,10 +91,12 @@ npm run dev
 - この段階では**モック表示まで**。実際のP2P通信は後続フェーズで実装
 - identityは `~/.linkself/identity.json` に保存されます
 - Windows環境での動作を優先（他のプラットフォームは後続）
+- **LinkSelf daemon** のソースは **core 内（core/cmd/linkself-daemon）** にのみあります。chat-client 内に daemon ディレクトリはありません
 
 ## ドキュメント
 
 - [テスト動作のエントリポイント](docs/entry-point.md) — テスト動作させたいときはここから
+- [実装変更履歴（要約）](docs/implementation-changes.md) — 廃止・変更した内容（DHT モード、Listen、接続方法など）
 - [実装計画](docs/implementation-plan.md)
 - [テスト動作ガイド](docs/testing-guide.md)
 - [友達追加・申請承認・複数インスタンス](docs/friend-add-and-multi-instance.md)

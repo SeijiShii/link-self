@@ -52,7 +52,7 @@ npm run build:daemon
 - `core/cmd/linkself-daemon/main.go` をコンパイル
 - `build/linkself-daemon.exe` を生成
 
-**注意**: daemonは`core`モジュール内に配置されているため、`core`モジュールの`internal`パッケージにアクセスできます。
+**注意**: daemon は `core` モジュール内（`core/cmd/linkself-daemon`）に配置され、公開API（`pkg/linkself`）のみに依存します。chat-client 内に daemon ソースはありません。
 
 **注意**: ビルドが成功すると、`build/` フォルダに `linkself-daemon.exe` が作成されます。
 

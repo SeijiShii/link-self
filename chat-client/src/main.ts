@@ -357,8 +357,7 @@ ipcMain.handle('linkself:start', async (_event, params: StartParams) => {
     } else if (!disablePublicDHT) {
       mergedParams.bootstrapPeers = [...DEFAULT_PUBLIC_DHT_BOOTSTRAP_PEERS];
     }
-    mergedParams.usePublicDHT = process.env.USE_PUBLIC_DHT === '1' || process.env.USE_PUBLIC_DHT === 'true';
-    console.log('[LinkSelf] profile:', getAppProfile(), 'identityPath:', identityPath, 'bootstrapPeers:', mergedParams.bootstrapPeers?.length ?? 0, 'usePublicDHT:', mergedParams.usePublicDHT);
+    console.log('[LinkSelf] profile:', getAppProfile(), 'identityPath:', identityPath, 'bootstrapPeers:', mergedParams.bootstrapPeers?.length ?? 0);
     const result = await sendRequest('start', mergedParams) as StartResult;
     return result;
   } catch (error) {

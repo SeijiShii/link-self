@@ -75,7 +75,6 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		Identity:       identity,
 		ListenAddrs:    listenAddrs,
 		BootstrapPeers: bootstrapPeers,
-		UsePublicDHT:   config.UsePublicDHT,
 	}
 
 	n, err := node.New(ctx, cfg)
@@ -142,13 +141,18 @@ func (c *client) SendMessage(ctx context.Context, peerDID string, message string
 }
 
 // Connect connects to a peer and authenticates.
-// See Client.Connect for detailed documentation.
-func (c *client) Connect(ctx context.Context, peerDID string) error {
+// By default finds the peer via the public DHT (FindPeer) and then dials and authenticates.
+// If listenAddr is non-empty, connects directly to that address without DHT lookup (legacy).
+func (c *client) Connect(ctx context.Context, peerDID string, listenAddr string) error {
 	if c.node == nil {
 		return fmt.Errorf("node not started")
 	}
-
-	_, err := c.node.Connect(ctx, peerDID)
+	var err error
+	if listenAddr != "" {
+		_, err = c.node.ConnectToAddr(ctx, peerDID, listenAddr)
+	} else {
+		_, err = c.node.Connect(ctx, peerDID)
+	}
 	return err
 }
 

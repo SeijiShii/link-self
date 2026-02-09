@@ -15,7 +15,7 @@ function contactRecordToContact(r: { did: string; name?: string; lastMessage?: s
 }
 
 function App() {
-  const { myDID, listenAddr, isConnected, start, sendMessage, connect, onMessage } = useLinkSelf();
+  const { myDID, isConnected, start, sendMessage, connect, onMessage } = useLinkSelf();
   const [currentContact, setCurrentContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -147,19 +147,16 @@ function App() {
   }, []);
 
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const handleCopyCombined = useCallback(async () => {
+  const handleCopyDID = useCallback(async () => {
     if (!myDID) return;
     try {
-      const text = listenAddr
-        ? `DID: ${myDID}\nListen: ${listenAddr}`
-        : `DID: ${myDID}`;
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(myDID);
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 1500);
     } catch (e) {
-      console.error('Failed to copy DID+Listen:', e);
+      console.error('Failed to copy DID:', e);
     }
-  }, [myDID, listenAddr]);
+  }, [myDID]);
 
   return (
     <div className="app">
@@ -170,7 +167,7 @@ function App() {
           <div className="my-did">
             <span>My DID: </span>
             <code>{myDID.substring(0, 20)}...</code>
-            <button type="button" className="btn-copy-did" onClick={handleCopyCombined} title={copyFeedback ? 'コピーしました' : 'DIDとListen（結合形式）をコピー'}>
+            <button type="button" className="btn-copy-did" onClick={handleCopyDID} title={copyFeedback ? 'コピーしました' : 'DIDをコピー'}>
               {copyFeedback ? (
                 <svg className="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <polyline points="20 6 9 17 4 12" />
@@ -182,12 +179,6 @@ function App() {
                 </svg>
               )}
             </button>
-            {listenAddr && (
-              <div className="listen-addr" title="2つ目のインスタンス起動時に BOOTSTRAP_PEER に指定。QRコードではDIDと一緒に共有予定">
-                <span className="listen-addr-label">Listen: </span>
-                <code className="listen-addr-value">{listenAddr.length > 28 ? listenAddr.substring(0, 28) + '...' : listenAddr}</code>
-              </div>
-            )}
           </div>
         )}
       </div>

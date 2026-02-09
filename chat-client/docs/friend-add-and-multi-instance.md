@@ -41,7 +41,7 @@ UI では「DID 入力」を 1 つにし、QR スキャン結果も手打ちも�
 
 | 項目 | 仕様 |
 |------|------|
-| **QR 共有** | 自分の DID（＋必要なら Listen 情報）を QR コードで表示。共有ボタンまたは設定から表示。 |
+| **QR 共有** | 自分の DID を QR コードで表示。共有ボタンまたは設定から表示。 |
 | **DID 入力** | QR スキャンまたは手打ち・コピペ。簡易検証（`did:key:` で始まる等）。自分の DID は申請・追加不可。 |
 | **友達申請** | 入力した DID 宛に「友達申請」メッセージを 1 回送信。既に連絡先の場合は申請不要。 |
 | **申請一覧** | 受信した友達申請を一覧表示。送信元 DID・受信日時。 |
@@ -61,10 +61,10 @@ UI では「DID 入力」を 1 つにし、QR スキャン結果も手打ちも�
   - インスタンス A: `electron . --user-data-dir=./data/userA`
   - インスタンス B: `electron . --user-data-dir=./data/userB`
 - 各 userData 配下に保存するもの:
-  - identity（daemon に渡す identityPath）
+  - identity（core の linkself-daemon に渡す identityPath）
   - contacts.json（連絡先）
   - 申請一覧・メッセージ等（仕様に応じてファイル分割）
-- daemon 起動時に、そのインスタンスの userData に紐づく identity パスを渡す。
+- linkself-daemon（core/cmd/linkself-daemon）起動時に、そのインスタンスの userData に紐づく identity パスを渡す。daemon のソースは core 内にのみあり、chat-client 内に daemon ディレクトリはない。
 
 ### 5.2 開発・検証用（実装済み）
 

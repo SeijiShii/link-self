@@ -40,7 +40,6 @@ type StartParams struct {
 	ListenAddrs    []string `json:"listenAddrs,omitempty"`
 	BootstrapPeers []string `json:"bootstrapPeers,omitempty"`
 	IdentityPath   string   `json:"identityPath,omitempty"`
-	UsePublicDHT   bool     `json:"usePublicDHT,omitempty"`
 }
 
 type StartResult struct {
@@ -54,7 +53,8 @@ type SendMessageParams struct {
 }
 
 type ConnectParams struct {
-	PeerDID string `json:"peerDID"`
+	PeerDID   string `json:"peerDID"`
+	ListenAddr string `json:"listenAddr,omitempty"`
 }
 
 type MessageNotificationParams struct {
@@ -137,7 +137,6 @@ func handleStart(req *JSONRPCRequest) {
 		IdentityPath:   params.IdentityPath,
 		ListenAddrs:    params.ListenAddrs,
 		BootstrapPeers: params.BootstrapPeers,
-		UsePublicDHT:   params.UsePublicDHT,
 	}
 
 	// Start node using public API
@@ -229,7 +228,7 @@ func handleConnect(req *JSONRPCRequest) {
 		}
 	}
 
-	err := linkSelfClient.Connect(ctx, params.PeerDID)
+	err := linkSelfClient.Connect(ctx, params.PeerDID, params.ListenAddr)
 	if err != nil {
 		sendError(req.ID, -32000, "Failed to connect", err.Error())
 		return

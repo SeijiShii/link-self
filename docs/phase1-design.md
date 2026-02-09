@@ -111,8 +111,7 @@ link-self/
 ## 5. DID ↔ DHT キー・メッセージ形式（仕様）
 
 - **DID**: `did:key:` + multibase(base58btc, multicodec(0xed) + raw Ed25519 公開鍵 32 バイト)。
-- **DHT キー**: `/linkself/did/` + base32(SHA256(DID 文字列))。DHT は `ProtocolPrefix("/linkself")` で他 DHT と分離。
-- **DHT 値**: JSON 化した `peer.AddrInfo`（ID + Addrs）。
+- **DHT**: 常に公開 DHT（`ProtocolPrefix("/ipfs")`）を使用。PutDID/FindDID は使わず、FindPeer(DIDToPeerID(did)) で相手を検索。
 - **メッセージプロトコル**: `/linkself/msg/1.0.0`。ペイロードは 4 バイト BigEndian 長 + 本体。
 
 ---

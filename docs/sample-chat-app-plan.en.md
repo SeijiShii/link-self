@@ -58,7 +58,7 @@
 
 ### Usage (one PC, two nodes, 2-person group)
 
-1. **Terminal 1:** `go run ./cmd/linkself` (or built `linkself`) → prints “My DID: did:key:...”, “Listen: /ip4/127.0.0.1/tcp/4001/p2p/...”.
+1. **Terminal 1:** `go run ./cmd/linkself` (or built `linkself`) → prints “My DID: did:key:...”. The daemon Start result also includes a listen address; the chat client UI shows only the DID.
 2. **Terminal 2:** `linkself --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PeerID>` → second node joins DHT. Add terminal 1’s DID to contacts, register **2-person group** (self + peer DIDs), then `connectToGroup` and `sendToGroup`.
 3. On both sides: “add peer DID → connectToGroup as 2-person group → sendToGroup” for bidirectional chat. Store-and-Forward is handled by core; offline send works as-is.
 
@@ -67,7 +67,7 @@
 ## Implementation tasks (draft)
 
 1. **Add `core/cmd/linkself/main.go`**  
-   Flags: `--listen`, `--bootstrap`, `--identity`. Generate/save/load identity. Pass `ListenAddrs` and `BootstrapPeers` to `node.New` → `Start`. Print “My DID”, “Listen address” on start.
+   Flags: `--listen`, `--bootstrap`, `--identity`. Generate/save/load identity. Pass `ListenAddrs` and `BootstrapPeers` to `node.New` → `Start`. Print “My DID” on start (listen address is in daemon result; client UI shows only DID).
 
 2. **Interactive loop**  
    Read commands from stdin (e.g. `add <DID>`, `group <DID>...`, `connectToGroup`, `sendToGroup <text>`, `list`, `quit`). `SetOnMessage`: print “From <DID>: <text>”. `add`: add DID to contacts. `group`: register current group (member DID list). `connectToGroup`: call `node.ConnectToGroup(ctx, memberDIDs)`. `sendToGroup`: call `node.SendToGroup(ctx, memberDIDs, []byte(text))`. `quit`: `node.Close()` and exit.

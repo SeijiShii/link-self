@@ -67,9 +67,9 @@ chat-client/
 
 ### 2. LinkSelf Daemon（Go）
 
-- **daemon/main.go**:
+- **core/cmd/linkself-daemon/main.go**（daemon は core 内に配置。chat-client に daemon ディレクトリはない）:
   - JSON-RPCサーバー（stdio経由）
-  - LinkSelf Nodeの初期化・管理
+  - LinkSelf Nodeの初期化・管理（pkg/linkself のみ依存）
   - メソッド: `start`, `stop`, `getMyDID`, `sendMessage`, `connect`, `setOnMessage`等
   - identityの保存・読み込み（`identity.json`）
   - メッセージ受信時のJSON-RPC通知

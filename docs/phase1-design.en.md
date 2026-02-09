@@ -79,8 +79,7 @@ link-self/
 ## 5. DID ↔ DHT key, message format (spec)
 
 - **DID:** `did:key:` + multibase(base58btc, multicodec(0xed) + raw Ed25519 public key 32 bytes).
-- **DHT key:** `/linkself/did/` + base32(SHA256(DID string)). DHT uses `ProtocolPrefix("/linkself")` to separate from other DHTs.
-- **DHT value:** JSON-encoded `peer.AddrInfo` (ID + Addrs).
+- **DHT:** Always uses the public DHT (`ProtocolPrefix("/ipfs")`). Peers are discovered via FindPeer(DIDToPeerID(did)); PutDID/FindDID are not used.
 - **Message protocol:** `/linkself/msg/1.0.0`. Payload: 4-byte BigEndian length + body.
 
 ---

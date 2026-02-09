@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/SeijiShii/link-self/core/internal/did"
-	"github.com/SeijiShii/link-self/core/internal/dht"
 	"github.com/SeijiShii/link-self/core/internal/node"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -30,7 +29,7 @@ func TestDIDGenerationConsistency(t *testing.T) {
 	}
 }
 
-// TestDHTProvideFind: Node A provides, Node B finds A's AddrInfo by DID.
+// TestDHTProvideFind: Node B bootstraps to A, then finds A's AddrInfo via public DHT FindPeer(DIDToPeerID).
 func TestDHTProvideFind(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -63,9 +62,13 @@ func TestDHTProvideFind(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	found, err := dht.FindDID(ctx, nB.DHT, nA.Identity.DID)
+	pid, err := did.DIDToPeerID(nA.Identity.DID)
 	if err != nil {
-		t.Fatalf("FindDID: %v", err)
+		t.Fatalf("DIDToPeerID: %v", err)
+	}
+	found, err := nB.DHT.FindPeer(ctx, pid)
+	if err != nil {
+		t.Fatalf("FindPeer: %v", err)
 	}
 	if found.ID != nA.Host.ID() {
 		t.Errorf("found wrong peer: %s vs %s", found.ID, nA.Host.ID())

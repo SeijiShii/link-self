@@ -29,7 +29,6 @@ export interface StartParams {
   listenAddrs?: string[];
   bootstrapPeers?: string[];
   identityPath?: string;
-  usePublicDHT?: boolean;
 }
 
 export interface StartResult {

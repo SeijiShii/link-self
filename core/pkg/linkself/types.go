@@ -78,10 +78,6 @@ type Config struct {
 	//
 	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	BootstrapPeers []string
-
-	// UsePublicDHT joins the public DHT (/ipfs) and discovers peers by PeerID (FindPeer) instead of PutDID/FindDID.
-	// Set true to use bootstrap.libp2p.io and allow DID-based connect without a LinkSelf bootstrap node.
-	UsePublicDHT bool
 }
 
 // NodeInfo contains information about a started node.
@@ -236,7 +232,9 @@ type Client interface {
 	//   - ノードが起動していない
 	//   - peerDIDが無効
 	//   - ピアが見つからないか接続できない
-	Connect(ctx context.Context, peerDID string) error
+	//
+	// listenAddr が非空のときは DHT 検索をスキップし、そのアドレスに直接接続する（後方互換用。推奨は DHT のみで peerDID のみ渡す）。
+	Connect(ctx context.Context, peerDID string, listenAddr string) error
 
 	// SetOnMessage sets the message handler callback.
 	// The handler is called whenever a message is received from any peer.
