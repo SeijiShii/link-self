@@ -7,3 +7,6 @@ build/
 identity.json
 .env
 .env.local
+
+# Electron / 開発時のユーザーデータ・キャッシュ（追跡しない）
+data/
