@@ -24,19 +24,10 @@ type client struct {
 // NewClient creates a new LinkSelf client.
 // The returned client must be started with Start() before it can be used.
 //
-// Example:
-//
-//	client := linkself.NewClient()
-//	info, err := client.Start(ctx, config)
-//	if err != nil {
-//		return err
-//	}
-//	defer client.Stop(ctx)
-//
 // NewClient は、新しいLinkSelfクライアントを作成します。
 // 返されたクライアントは、使用する前にStart()で起動する必要があります。
 //
-// 例:
+// Example:
 //
 //	client := linkself.NewClient()
 //	info, err := client.Start(ctx, config)

@@ -6,6 +6,14 @@
 // All operations are performed through this interface, ensuring that applications
 // don't need to depend on internal packages.
 //
+// Package linkself は、LinkSelfノードと対話するための公開APIを提供します。
+// このパッケージは、内部実装の詳細を抽象化し、アプリケーションがLinkSelfの機能を
+// 使用するための安定したインターフェースを提供します。
+//
+// メインのエントリーポイントは、NewClient()で作成できるClientインターフェースです。
+// すべての操作はこのインターフェースを通じて実行され、アプリケーションが
+// internalパッケージに依存する必要がなくなります。
+//
 // Example usage:
 //
 //	client := linkself.NewClient()
@@ -23,32 +31,6 @@
 //	})
 //
 //	err = client.SendMessage(ctx, peerDID, "Hello!")
-//
-// Package linkself は、LinkSelfノードと対話するための公開APIを提供します。
-// このパッケージは、内部実装の詳細を抽象化し、アプリケーションがLinkSelfの機能を
-// 使用するための安定したインターフェースを提供します。
-//
-// メインのエントリーポイントは、NewClient()で作成できるClientインターフェースです。
-// すべての操作はこのインターフェースを通じて実行され、アプリケーションが
-// internalパッケージに依存する必要がなくなります。
-//
-// 使用例:
-//
-//	client := linkself.NewClient()
-//	config := linkself.Config{
-//		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
-//	}
-//	info, err := client.Start(ctx, config)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	defer client.Stop(ctx)
-//
-//	client.SetOnMessage(func(peerDID string, payload []byte) {
-//		fmt.Printf("受信: %s\n", string(payload))
-//	})
-//
-//	err = client.SendMessage(ctx, peerDID, "こんにちは!")
 package linkself
 
 import "context"
@@ -78,26 +60,23 @@ type Config struct {
 
 	// ListenAddrs are the addresses to listen on in multiaddr format.
 	// If empty, defaults to ["/ip4/127.0.0.1/tcp/0"].
+	//
+	// ListenAddrs は、リッスンするアドレスのリスト（multiaddr形式）です。
+	// 空の場合は、デフォルトで ["/ip4/127.0.0.1/tcp/0"] が使用されます。
+	//
 	// Examples:
 	//   - "/ip4/127.0.0.1/tcp/4001" (IPv4 TCP)
 	//   - "/ip6/::/tcp/4001" (IPv6 TCP)
 	//   - "/ip4/0.0.0.0/tcp/4001" (all interfaces)
-	//
-	// ListenAddrs は、リッスンするアドレスのリスト（multiaddr形式）です。
-	// 空の場合は、デフォルトで ["/ip4/127.0.0.1/tcp/0"] が使用されます。
-	// 例:
-	//   - "/ip4/127.0.0.1/tcp/4001" (IPv4 TCP)
-	//   - "/ip6/::/tcp/4001" (IPv6 TCP)
-	//   - "/ip4/0.0.0.0/tcp/4001" (すべてのインターフェース)
 	ListenAddrs []string
 
 	// BootstrapPeers are the bootstrap peer addresses in multiaddr format.
 	// These peers are used for initial peer discovery in the DHT.
-	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	//
 	// BootstrapPeers は、ブートストラップピアのアドレス（multiaddr形式）です。
 	// これらのピアは、DHTでの初期ピア発見に使用されます。
-	// 例: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
+	//
+	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	BootstrapPeers []string
 }
 
@@ -114,11 +93,11 @@ type NodeInfo struct {
 
 	// ListenAddr is the node's listen address in multiaddr format.
 	// This includes both the network address and the peer ID.
-	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	//
 	// ListenAddr は、ノードのリッスンアドレス（multiaddr形式）です。
 	// これには、ネットワークアドレスとピアIDの両方が含まれます。
-	// 例: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
+	//
+	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	ListenAddr string
 }
 
