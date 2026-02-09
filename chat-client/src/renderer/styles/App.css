@@ -24,11 +24,11 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f5f5f5;
+  background-color: #F8FAF6;
 }
 
 .app-header {
-  background-color: #00c300;
+  background-color: #3FA09C;
   color: white;
   padding: 12px 20px;
   display: flex;
@@ -110,18 +110,18 @@ body {
 }
 
 .contact-item:hover {
-  background-color: #f5f5f5;
+  background-color: #F0F5F3;
 }
 
 .contact-item.active {
-  background-color: #e8f5e9;
+  background-color: #E8F3F1;
 }
 
 .contact-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: #00c300;
+  background-color: #3FA09C;
   color: white;
   display: flex;
   align-items: center;
@@ -166,7 +166,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: #f5f5f5;
+  background-color: #F8FAF6;
   overflow: hidden;
 }
 
@@ -251,7 +251,7 @@ body {
 }
 
 .message-bubble.sent .message-content {
-  background-color: #00c300;
+  background-color: #3FA09C;
   color: white;
   border-bottom-right-radius: 4px;
 }
@@ -290,11 +290,11 @@ body {
 }
 
 .message-input-field:focus {
-  border-color: #00c300;
+  border-color: #3FA09C;
 }
 
 .message-send-button {
-  background-color: #00c300;
+  background-color: #3FA09C;
   color: white;
   border: none;
   border-radius: 20px;
@@ -306,7 +306,7 @@ body {
 }
 
 .message-send-button:hover:not(:disabled) {
-  background-color: #00a300;
+  background-color: #35968F;
 }
 
 .message-send-button:disabled {
@@ -324,10 +324,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: #3FA09C;
   border-radius: 4px;
+  opacity: 0.6;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #35968F;
+  opacity: 0.8;
 }

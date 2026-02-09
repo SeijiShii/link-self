@@ -4,6 +4,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { JSONRPCRequest, JSONRPCResponse, JSONRPCNotification, StartParams, StartResult, SendMessageParams, ConnectParams } from './types/linkself';
 
+// Disable hardware acceleration for Linux compatibility
+app.disableHardwareAcceleration();
+
 let mainWindow: BrowserWindow | null = null;
 let daemonProcess: ChildProcess | null = null;
 let requestIdCounter = 0;
@@ -11,7 +14,8 @@ const pendingRequests = new Map<number | string, { resolve: (value: unknown) => 
 
 function createWindow() {
   // Preload script is compiled to dist/src/preload.js
-  const preloadPath = path.join(__dirname, 'src', 'preload.js');
+  // __dirname is dist/src when running from dist/src/main.js
+  const preloadPath = path.join(__dirname, 'preload.js');
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -20,16 +24,60 @@ function createWindow() {
       preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true,
     },
+    show: false, // Don't show until ready
+  });
+
+  // Show window when ready to prevent white screen
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
   });
 
   // Load the React app
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  if (isDev) {
+    const devUrl = 'http://localhost:5173';
+    console.log('Loading dev URL:', devUrl);
+    
+    // Wait a bit for Vite dev server to be ready
+    setTimeout(() => {
+      mainWindow?.loadURL(devUrl).catch((err) => {
+        console.error('Failed to load URL:', err);
+        // Retry after a delay
+        setTimeout(() => {
+          console.log('Retrying to load URL...');
+          mainWindow?.loadURL(devUrl).catch((retryErr) => {
+            console.error('Retry failed:', retryErr);
+          });
+        }, 2000);
+      });
+      mainWindow?.webContents.openDevTools();
+    }, 1000);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/renderer/index.html'));
   }
+
+  // Debug: Log when page loads
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Page finished loading successfully');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Failed to load page:', {
+      errorCode,
+      errorDescription,
+      url: validatedURL,
+    });
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('DOM ready');
+  });
+
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`[Renderer ${level}]:`, message);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
