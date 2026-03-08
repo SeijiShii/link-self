@@ -28,7 +28,9 @@ link-self/
 │   │   ├── node/               # ノード（Host + DHT + Auth + Store-and-Forward）
 │   │   ├── storeforward/       # メッセージキュー・オンライン検知時送信
 │   │   ├── group/              # グループ（メンバー DID 集合）・ストア
-│   │   └── syncdb/             # 同期 DB 層
+│   │   ├── devicesync/         # DeviceSync（同一DID間の透過的DB同期）✅ 実装済み
+│   │   ├── groupshare/         # GroupShare（異なるDID間のChannel型データ共有）✅ 実装済み
+│   │   └── syncdb/             # 旧同期 DB 層（廃止予定 → devicesync + groupshare）
 │   ├── pkg/linkself/           # 公開 API（Client インターフェース、型定義）
 │   ├── cmd/linkself-daemon/    # JSON-RPC daemon（Electron 等から子プロセスで利用）
 │   └── test/integration/       # 多ノード統合テスト
@@ -40,7 +42,7 @@ link-self/
     ├── README.ja.md, README.en.md
     ├── phase1-design.md        # Phase 1 設計（実装済み）
     ├── group-concept.md        # グループの概念
-    ├── sync-db-plan.md        # 分散 DB 化計画
+    ├── sync-db-plan.md        # DeviceSync / GroupShare 二層アーキテクチャ設計
     ├── sample-chat-app-plan.md # サンプルアプリ（チャット＋ファイル共有）計画
     ├── using-linkself-as-library.md
     ├── gitcoin-funding.md
@@ -65,7 +67,10 @@ link-self/
 
 | 項目 | 状態 | 備考 |
 |------|------|------|
-| internal: did, dht, auth, node, storeforward, group, syncdb | ✅ | Phase 1 実装済み |
+| internal: did, dht, auth, node, storeforward, group | ✅ | Phase 1 実装済み |
+| internal: devicesync | ✅ | DeviceSync コア実装済み（MemStorage + ReplicationEngine、18テスト・91.1%カバレッジ） |
+| internal: groupshare | ✅ | GroupShare コア実装済み（MemSharedStorage + GroupShareLayer、17テスト・88.5%カバレッジ） |
+| internal: syncdb | ⚠️ 廃止予定 | devicesync + groupshare で置換。Phase E で削除 |
 | pkg/linkself 公開 API | ✅ | Client, Config, NewClient, Start/Stop, SendMessage, Connect, SetOnMessage |
 | cmd/linkself-daemon | ✅ | JSON-RPC、**pkg/linkself のみに依存**（internal 直接依存なし） |
 | DHT | ✅ | 常に公開 DHT（/ipfs）。FindPeer(DIDToPeerID) で検索。UsePublicDHT は廃止 |
@@ -110,9 +115,26 @@ link-self/
 
 ## 6. 次の作業候補（リポジトリ全体）
 
+### DeviceSync / GroupShare 二層アーキテクチャ（Phase 2 コア）
+
+- [x] **DeviceSync コア実装** — MemStorage + ReplicationEngine（18テスト・91.1%カバレッジ）
+- [x] **GroupShare コア実装** — MemSharedStorage + GroupShareLayer（17テスト・88.5%カバレッジ）
+- [x] **設計ドキュメント更新** — sync-db-plan, linkself-data-persistence-plan, sample-chat-app-plan 等を新アーキテクチャに更新
+- [ ] **公開 API 拡張**（Phase C）— `pkg/linkself` に `DeviceDB()` / `GroupShare()` / `Groups()` を追加
+- [ ] **Node プロトコル分離** — `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0` を追加
+- [ ] **daemon JSON-RPC 拡張** — `devicedb.*`, `groupshare.*`, `groups.*` メソッド追加
+- [ ] **SQLite 参照実装** — DeviceStorage / SharedStorage の SQLite 実装
+- [ ] **差分同期ハンドシェイク** — DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
+- [ ] **旧 syncdb 廃止**（Phase E）— `core/internal/syncdb/` を削除
+
+### サンプルアプリ・クライアント
+
 - [x] **サンプルチャットアプリ: 友達追加機能** — DID 入力・友達申請・承認/拒否・永続化は実装済み
-- [ ] **チャットクライアントを計画書に沿って作り変える** — [docs/linkself-data-persistence-plan.md](docs/linkself-data-persistence-plan.md) の内容に沿い、LinkSelf データルート／DID 空間・つながりの LinkSelf 内包・sync-db クライアント対応、DID 選択・アプリID 渡しなどに合わせて作り直す
-- [ ] **Phase 2 本格サンプルアプリ**: ファイル共有スコープの検討・実装（sample-chat-app-plan に沿う）。1 対 1 メッセージ送受信は動作済み
+- [ ] **チャットクライアントを DeviceDB + GroupShare に移行** — contacts/friend-requests を DeviceDB 経由に変更、メッセージ送受信を GroupShare Channel 経由に変更
+- [ ] **Phase 2 本格サンプルアプリ**: ファイル共有スコープの検討・実装（sample-chat-app-plan に沿う）
+
+### その他
+
 - [ ] **Core API 進化**: SendToGroup / ConnectToGroup への移行（core/README 記載の計画）
 - [ ] **マルチプラットフォーム**: build:daemon のバイナリ名・パスを OS 別にし、chat-client の起動パスを拡張
 - [ ] **ドキュメント**: CONTRIBUTING.md / CODE_OF_CONDUCT.md の追加（任意）
@@ -120,4 +142,4 @@ link-self/
 
 ---
 
-*最終更新: 友達追加・P2P 送受信の実装済み反映、DHT/Listen 廃止の現仕様反映、参照ドキュメント追加*
+*最終更新: DeviceSync / GroupShare 二層アーキテクチャ実装・ドキュメント更新反映（2026-03）*

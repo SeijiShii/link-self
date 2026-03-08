@@ -106,12 +106,14 @@ flowchart TB
 - **チャットクライアント**は、contacts / friend_requests / groups を自前の userData には持たず、**利用する DID とアプリID を指定して** LinkSelf の API（daemon の RPC）を呼ぶ。daemon は指定された DID の空間と、その下の `apps/<app-id>/` だけを読み書きする。
 - 複数インスタンス起動時は、**起動引数や UI で DID を選択**し、選んだ DID に紐づくデータでライブラリを利用する。
 
-### 5.5 sync-db の前提・仕様
+### 5.5 データ同期の二層構造（DeviceSync / GroupShare）
 
-- **sync-db は LinkSelf の「つながり」（contacts, friend_requests, groups）を保持するストレージではない**。つながりは DID 空間内の user.db 等で LinkSelf が別管理する。sync-db は、アプリがテーブルを定義して使う**同期付き DB** 用である。
-- アプリは **sync-db インターフェース（DB クライアント）を通して** sync-db にアクセスする。**DB クライアントを初期化するときにアプリID を渡す**。
-- **アプリ初回起動時**に、そのクライアントを通じて**必要なテーブル定義を作成**する。その後、**テーブルに対して SQLite の一般的な操作**（CRUD 等）を実行できる。
-- **内部構造**: DID 空間＋アプリID に対応したストレージに、**アプリごとに 1 つの論理 DB** があり、その中に**アプリが定義したテーブル**が存在する。行は SyncRecord として格納され、同期レイヤがメタ付与・送信・後勝ち適用を担当する。
+> **注意（2026-03）:** 旧 sync-db（単一 SyncLayer）は **DeviceSync / GroupShare 二層アーキテクチャ** に移行した。詳細は [sync-db-plan.md](sync-db-plan.md) を参照。
+
+- **DeviceSync（同一 DID 間）**: DID 空間内の全データ（contacts、messages、アプリデータ等）を同一 DID の全デバイス間で**透過的に全同期**する。アプリは同期を意識しない。`DeviceDB.Put("contacts", id, body)` のようにローカル DB として使うと、自動的に他デバイスに複製される。
+- **GroupShare（異なる DID 間）**: アプリが **Channel**（名前・スキーマ・権限）を定義し、**アプリが選んだ共有データのみ**をグループメンバーに送る。サーバーサイド API のように振る舞う。`AccessPolicy` / `SchemaValidator` はアプリが実装する。
+- **ストレージ**: 各 DID 空間内に DeviceStorage（全データ + ChangeLog）と SharedStorage（共有レコード）を配置。インターフェース化されており、SQLite 参照実装またはアプリ独自の実装を注入できる。
+- **アプリID**: アプリごとのデータは DID 空間内 `apps/<app-id>/` に分離。GroupShare の Channel 登録時にもアプリID で名前空間を分けることが可能。
 
 ---
 
@@ -136,11 +138,12 @@ flowchart TB
 - **実装場所**: core 内（例: `core/internal/userstore` または既存の group 拡張）。daemon は「今回のセッションで使う DID」に応じてその DID 空間のストアを開き、RPC で getContacts / addContact / getFriendRequests / getGroups / createGroup 等を提供。
 - **チャットクライアント**: 起動時または設定で **DID を選択**し、contacts / friend_requests の取得・更新は **その DID を指定した daemon の RPC** に切り替える。自前の JSON 読み書きは廃止。
 
-### 6.3 チャット内容を共通 sync-db で扱う（DID 空間内）
+### 6.3 チャット内容を DeviceSync + GroupShare で扱う（DID 空間内）
 
-- **RecordStorage の SQLite 実装**を追加し、**DID 空間内**の **sync.db** を参照する。
-- daemon で **SyncLayer** を組み立て、SetOnMessage で SyncRecord を HandleIncoming。メッセージ送信時に SyncLayer.Put も行う（または sendMessage と Put をまとめた RPC を用意）。
-- チャットクライアントは、メッセージ一覧の取得・送信を **sync-db 経由の RPC** に切り替える。いずれも「利用する DID」が決まっているので、その DID 空間の sync.db が使われる。
+- **DeviceSync**: contacts / friend_requests / メッセージ履歴は `DeviceDB.Put` で DID 空間内に保存。同一 DID の全デバイスに自動複製される。
+- **GroupShare**: チャットメッセージの送信は `GroupShare.Put("chat", msgID, body)` で Channel 経由。グループメンバーに AccessPolicy に沿って配信される。
+- **受信側**: GroupShare の `SetOnSharedData` で受信 → ローカルの DeviceDB にも保存（履歴の全デバイス同期）。
+- チャットクライアントは、メッセージ一覧の取得を **DeviceDB 経由の RPC**（ローカルから読み取り）、送信を **GroupShare 経由の RPC** に切り替える。
 
 ### 6.4 複数インスタンス・複数アプリと DID 選択
 
@@ -152,11 +155,11 @@ flowchart TB
 
 ## 7. 依存・注意点
 
-- **sync-db の SQLite 実装**: [sync-db 計画](sync-db-plan.md) では未着手のため、Phase 2 で RecordStorage の SQLite 実装を追加する。
+- **DeviceStorage / SharedStorage の SQLite 実装**: [sync-db 計画](sync-db-plan.md) に基づき、DeviceSync 用の DeviceStorage と GroupShare 用の SharedStorage の SQLite 実装を追加する。
 - **DID のディレクトリ名**: DID 文字列はファイルシステムで安全な形（例: SHA256 の先頭バイトを hex、または base64url エンコード）に変換して DID 空間のディレクトリ名にする必要がある。
 - **アプリID**: アプリごとのフォルダ名として使うアプリID は、**LinkSelf を利用するアプリがインスタンス初期化時（sync-db 等にアクセスするとき）に渡す**。LinkSelf は中央で ID を発行しない。アプリは Android のパッケージ名のように衝突しない一意な ID（例: 逆ドメイン `com.example.chat-client`）を選ぶ責任を持つ。アプリID をファイルシステムで安全なディレクトリ名に変換する必要がある場合は、DID と同様にエンコードする。
 - **保存されている実存の一覧**: LinkSelf が「利用可能な DID のリスト」を返す API を提供し、アプリ層で起動時や設定画面で DID を選択できるようにする。
 - **新規 DID 作成**: 新規 DID（新規実存）を作成する API／フローを Phase 2 で検討する。利用可能な DID 一覧に加え、ユーザーが新しい実存を追加する操作を LinkSelf が提供する。
 - **同一 DID 空間への複数プロセス**: 複数アプリの daemon が同一 DID 空間のファイルに同時アクセスする場合の方針（SQLite の WAL モードや単一 daemon 共有など）を Phase 2 で検討する。
-- **sync-db の一覧取得**: テーブル内のレコード一覧を取得する必要がある場合は、RecordStorage の List 拡張またはアプリ側のインデックスのいずれかで対応する。Phase 2 で検討する。
+- **一覧取得**: DeviceStorage.List / SharedStorage.ListByChannel で一覧取得をサポート済み。
 - **Windows AppData**: 実際のパスは `process.env.LOCALAPPDATA`（Node）や Go の `os.UserConfigDir` 等で取得する。インストーラやドキュメントで「LinkSelf のデータは AppData に保存されます」と明記するとよい。

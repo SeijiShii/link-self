@@ -3,7 +3,9 @@
 **English** (this page) | [日本語](sample-chat-app-plan.md)  
 **Status:** Not yet implemented (plan only, stored in docs)  
 **Summary:** Design for one full-featured sample app that **uses LinkSelf as infrastructure**: group/1-to-1 chat and P2P file sharing. Group info, contacts, sync meta, etc. are stored in **LinkSelf's DB**; the app uses LinkSelf's API.  
-**See also:** [Group concept](group-concept.en.md), [Phase 1 design](phase1-design.en.md), [Roadmap](README.en.md#roadmap)
+**See also:** [Group concept](group-concept.en.md), [Phase 1 design](phase1-design.en.md), [Data sync design (DeviceSync / GroupShare)](sync-db-plan.en.md), [Roadmap](README.en.md#roadmap)
+
+> **Note (2026-03):** Data sync has migrated to the **DeviceSync / GroupShare two-layer architecture**. The old SyncLayer is replaced by DeviceDB + GroupShare.
 
 ---
 

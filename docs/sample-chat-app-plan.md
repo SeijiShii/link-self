@@ -2,8 +2,10 @@
 
 **日本語**（このページ）| [English](sample-chat-app-plan.en.md)  
 **ステータス:** 実装保留（計画のみ docs に保存）  
-**概要:** **LinkSelf をインフラとして使用**する 1 本の本格サンプルアプリの設計。グループ/1対1 チャットと P2P ファイル共有を備える。グループ情報・連絡先・同期メタ等は **LinkSelf 側の DB** に保存され、アプリは LinkSelf の API 経由で参照・操作する。  
-**参照:** [グループの概念](group-concept.md)、[Phase 1 設計](phase1-design.md)、[ロードマップ](README.ja.md#roadmap)
+**概要:** **LinkSelf をインフラとして使用**する 1 本の本格サンプルアプリの設計。グループ/1対1 チャットと P2P ファイル共有を備える。グループ情報・連絡先・同期メタ等は **LinkSelf 側の DB** に保存され、アプリは LinkSelf の API 経由で参照・操作する。
+**参照:** [グループの概念](group-concept.md)、[Phase 1 設計](phase1-design.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[ロードマップ](README.ja.md#roadmap)
+
+> **注意（2026-03）:** データ同期は **DeviceSync / GroupShare 二層アーキテクチャ** に移行。旧 SyncLayer は DeviceDB + GroupShare に置き換わる。
 
 ---
 

@@ -33,6 +33,7 @@ type Node struct {
 	StoreForward *storeforward.StoreForward
 	mu           sync.Mutex
 	onMessage    func(peerDID string, payload []byte)
+	router       MessageRouter
 }
 
 // Config holds options for creating a Node.
@@ -110,8 +111,8 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 		remoteID := s.Conn().RemotePeer()
 		if pub := n.Host.Peerstore().PubKey(remoteID); pub != nil {
-			if peerDID, err := did.PubKeyToDID(pub); err == nil && n.onMessage != nil {
-				n.onMessage(peerDID, payload)
+			if peerDID, err := did.PubKeyToDID(pub); err == nil {
+				n.router.dispatch(peerDID, payload)
 			}
 		}
 	})
@@ -133,11 +134,32 @@ func (n *Node) sendMessageToPeer(pid peer.ID, payload []byte) error {
 	return err
 }
 
-// SetOnMessage sets a callback invoked when a message is received (peerDID, payload).
+// SetOnMessage sets a callback for plain/legacy messages (backward compatible).
 func (n *Node) SetOnMessage(fn func(peerDID string, payload []byte)) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.onMessage = fn
+	n.router.OnMessage = fn
+}
+
+// SetOnDeviceSync sets a callback for DeviceSync messages.
+func (n *Node) SetOnDeviceSync(fn func(peerDID string, payload []byte)) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.router.OnDeviceSync = fn
+}
+
+// SetOnGroupShare sets a callback for GroupShare messages.
+func (n *Node) SetOnGroupShare(fn func(peerDID string, payload []byte)) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.router.OnGroupShare = fn
+}
+
+// SendToPeerID sends a raw payload directly to a peer by their transport PeerID.
+// Used by DeviceSync where the recipient has a different PeerID from the shared DID.
+func (n *Node) SendToPeerID(ctx context.Context, pid peer.ID, payload []byte) error {
+	return n.sendMessageToPeer(pid, payload)
 }
 
 // SendToGroup sends a message to each member DID (excluding self). Uses SendMessage per DID;

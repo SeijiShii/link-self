@@ -1,9 +1,11 @@
 # グループ・同期 DB 実装ドキュメント
 
-**日本語**（このページ）| [English](group-syncdb-implementation.en.md)  
-**参照:** [グループの概念](group-concept.md)、[分散ネットワーク DB 化計画](sync-db-plan.md)
+**日本語**（このページ）| [English](group-syncdb-implementation.en.md)
+**参照:** [グループの概念](group-concept.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)
 
 本ドキュメントは、上記計画書と整合する形で**実装の配置・API・テスト**をまとめたものです。
+
+> **注意（2026-03）:** 同期 DB は **DeviceSync / GroupShare 二層アーキテクチャ** に移行した。旧 `syncdb` パッケージ（§3）は `devicesync` + `groupshare` で置換予定。新アーキテクチャの詳細は [sync-db-plan.md](sync-db-plan.md) を参照。
 
 ---
 

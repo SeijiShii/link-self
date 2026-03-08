@@ -5,6 +5,8 @@
 
 This document summarizes **implementation layout, APIs, and tests** in line with the above plans.
 
+> **Note (2026-03):** Sync DB has been migrated to the **DeviceSync / GroupShare two-layer architecture**. The old `syncdb` package (§3) is being replaced by `devicesync` + `groupshare`. See [sync-db-plan.en.md](sync-db-plan.en.md) for the new architecture.
+
 ---
 
 ## 1. Group (core/internal/group)

@@ -1,98 +1,222 @@
-# Sync DB plan — treating the distributed network as a DB
+# Data Sync Design: DeviceSync / GroupShare Two-Layer Architecture
 
-**English** (this page) | [日本語](sync-db-plan.md)  
-**Status:** Core implemented (sync layer, storage interface, in-memory implementation; SQLite reference implementation not yet done)  
-**See also:** [Phase 1 design](phase1-design.en.md), [Group concept](group-concept.en.md), [Group and Sync DB implementation](group-syncdb-implementation.en.md)
-
----
-
-## 1. Goals
-
-- Treat the distributed network as a DB from the app’s perspective.
-- **Sync layer wrapping SQLite3** for generality. **Storage is interface-based**; the app provides the implementation. The sync layer is responsible only for “meta attachment, immediate delivery, last-write-wins apply.”
-- **App implementers** (1) choose or implement storage (e.g. SQLite reference implementation) and (2) define tables and CRUD against that storage. The sync layer attaches and manages sync meta.
-- Use case: a group of users with the app installed edit documents (Figma-style); data is stored in app-chosen storage (e.g. SQLite) and the sync layer shares it over the network.
-- **Each record gets meta (ID, groupId, DID, Timestamp)** and is **shared immediately** to devices on the network.
-- Edit conflicts are resolved by **last-write-wins**.
-- **Edit/view permissions** are handled at the application layer ([Group concept](group-concept.en.md)). The core group handles only member/owner lifecycle.
+**English** (this page) | [日本語](sync-db-plan.md)
+**Status:** DeviceSync / GroupShare core implemented (in-memory storage and tests complete; SQLite reference implementation not yet done)
+**See also:** [Phase 1 design](phase1-design.en.md), [Group concept](group-concept.en.md), [Persistence plan](linkself-data-persistence-plan.md)
 
 ---
 
-## 2. Current assumptions
+## 1. Background and Direction Change
 
-- [core/internal/node](core/internal/node/node.go): Send is 1-to-1 (SendMessage) and group (SendToGroup implemented). Groups follow [Group concept](group-concept.en.md); member DID list.
-- [core/internal/storeforward](core/internal/storeforward/storeforward.go): Queue when offline; send when peer is detected online.
-- Group = **member DID list**. The DID list for a groupId is held in [core/internal/group](core/internal/group) Store; the sync layer obtains it via MemberResolver (wrapping group.Store) ([Group concept](group-concept.en.md)).
+The old design (single SyncLayer) broadcast records uniformly to all group members. However, data sharing between "your own devices" and "other users in a group" are fundamentally different semantics.
 
----
+- **Between own devices (same DID):** Should sync all data transparently, like a local DB
+- **Between group members (different DIDs):** Should work like a server-side API — only app-defined shared data flows, following app-defined permissions
 
-## 3. Architecture overview
-
-- **App implementers** provide a **storage implementation** (e.g. SQLite reference or custom persistence) and inject it into the sync layer. Table definitions and CRUD are against that storage.
-- **Sync layer** treats **storage as an interface**. On write it **attaches meta (ID, groupId, DID, Timestamp)** to each record and **immediately** shares it to members of that groupId via **SendToGroup**. On receive, only the **newer** of two records (same ID or table+pk) is applied to storage (last-write-wins).
+This led to deprecating the old `syncdb` package and replacing it with **`devicesync`** + **`groupshare`**.
 
 ---
 
-## 4. Design points
+## 2. Conceptual Model
 
-### 4.1 Placement and dependencies
+### 2.1 DeviceSync (same DID, multiple devices)
 
-- **New package:** `core/internal/syncdb`. Sync layer (meta, immediate delivery, last-write-wins). Sits between app and `node`.
-- **Dependencies:** Use node’s **SendToGroup** and **SetOnMessage**. **Storage is an interface**; the app injects the implementation. Groups follow [Group concept](group-concept.en.md); **groupId → member DID list** is held by the sync layer or app.
+```
+App → DeviceDB.Put("contacts", id, body)
+        ↓ automatically
+     ChangeLog entry → broadcast to all devices with same DID
+        ↓ receiver
+     last-write-wins apply (app is unaware of sync)
+```
 
-### 4.2 Storage interface
+| Aspect | Details |
+|--------|---------|
+| **Target** | Multiple devices sharing the same private key (= same DID) |
+| **Scope** | All data written by the app (all tables, all records) |
+| **Sync method** | Broadcast on write + catch-up sync on connect (ChangeLog-based) |
+| **Conflict resolution** | Last-write-wins (timestamp) |
+| **Groups** | Not used. Same DID devices don't need group.Group |
+| **Peer discovery** | DHT (same PeerID, multiple addresses) + mDNS (LAN) |
 
-- **Storage is interface-based**; the app provides the implementation. The sync layer requires only the minimal operations for “read/write records” and “get/compare Timestamp.”
-- **Benefits:** Flexibility (SQLite or custom persistence), testability (in-memory or mock), separation of concerns (sync layer focuses on meta, delivery, last-write-wins).
-- **Interface contract:** Put / Get / Delete records; get existing Timestamp for a key (for last-write-wins). Key = record ID or table+primary key.
-- **Reference implementation:** Provide a SQLite-based storage implementation; the app may use it as-is or wrap it (e.g. encryption).
+### 2.2 GroupShare (different DIDs)
 
-### 4.3 Record meta and immediate sharing
+```
+App → Define Channel (name, schema, access policy)
+    → GroupShare.Put(channel, id, body)
+        ↓ AccessPolicy.CanWrite(did) check
+     SharedRecord created → broadcast to group members
+        ↓ receiver
+     SchemaValidator.Validate() + AccessPolicy.CanRead(did) → apply or reject
+```
 
-| Meta field | Description |
-|------------|-------------|
-| **ID** | Unique record ID (e.g. UUID). Used for conflict resolution. |
-| **groupId** | Which group the record belongs to. Used to decide recipients (member DID list). |
-| **DID** | DID of the user (node) that wrote the record. |
-| **Timestamp** | Update time (milliseconds). Used for last-write-wins. |
-
-- When a write is committed, **changed records** are serialized with the above meta and **immediately** sent to members of that groupId via **SendToGroup**.
-- Payload format: record content + meta (id, groupId, DID, Timestamp) encoded as JSON etc. Receivers apply to storage with **Timestamp-based last-write-wins**.
-
-### 4.4 Group delivery
-
-- Send API: **SendToGroup(ctx, memberDIDs, payload)**. The **member DID list for groupId** is held by the sync layer or app; on commit, **each DID in that group** gets immediate delivery.
-- Offline peers receive via existing **Store-and-Forward** when they come online.
-
-### 4.5 Receive, apply, and last-write-wins
-
-- The callback registered with **SetOnMessage** decodes the payload as “record + meta (ID, groupId, DID, Timestamp).”
-- **Apply:** Call Put / Delete on the **storage interface** according to the record. The storage implementation (e.g. SQLite) performs the actual INSERT/UPDATE/DELETE.
-- **Last-write-wins:** For the same **record ID** (or table+pk), get the existing Timestamp from storage; **apply only if the received record’s Timestamp is greater**. Skip if equal or older.
-- On first apply or when meta is missing, apply.
-
----
-
-## 5. Notes and alignment with other plans
-
-- **Group discovery:** Who belongs to a group follows [Group concept](group-concept.en.md); member list is stored locally on each node. **Member DID list is provided by the app to SyncDB** (invite flow defined by app or a later phase).
-- **Permissions:** Document edit/view is handled at the **application layer**. Core group handles only member/owner lifecycle.
-- **Order:** Message arrival order and real-time order can differ; **always compare by timestamp** for last-write-wins, not by arrival order.
-- **Timestamp:** Implementation may use logical time (e.g. Lamport) for NTP skew; for now use wall-clock milliseconds and keep it extensible.
+| Aspect | Details |
+|--------|---------|
+| **Target** | Different DIDs within a group |
+| **Scope** | Only data explicitly defined as a Channel by the app |
+| **Permissions** | LinkSelf provides `AccessPolicy` / `SchemaValidator` interfaces; app implements them |
+| **Sync method** | Broadcast on Put via Channel + last-write-wins |
+| **Groups** | Reuses existing `group.Group` / `group.Service` as-is |
 
 ---
 
-## 6. Summary
+## 3. Architecture
 
-- Add a **sync layer** on top of node. **Storage is interface-based**; the app provides the implementation (SQLite reference or custom).
-- The sync layer handles **meta attachment, immediate delivery, last-write-wins apply** only. It attaches ID, groupId, DID, Timestamp to each record and **immediately** shares to devices (member DIDs for that groupId) via SendToGroup.
-- On receive, compare **per record by Timestamp** and apply via the storage interface with **last-write-wins**.
-- Groups follow [Group concept](group-concept.en.md); **groupId → member DID list** is held by the sync layer or app.
+```mermaid
+flowchart TB
+  subgraph app [App Layer]
+    AppCode[App Code]
+  end
+  subgraph infra [LinkSelf Infrastructure]
+    subgraph ds [DeviceSync]
+      DeviceDB[DeviceDB<br/>Put/Get/Delete/List]
+      RepEngine[ReplicationEngine<br/>broadcast + last-write-wins]
+      ChangeLog[ChangeLog<br/>for catch-up sync]
+    end
+    subgraph gs [GroupShare]
+      GSLayer[GroupShareLayer<br/>Channel management]
+      Channel[Channel<br/>name, schema, access]
+      AccessPolicy[AccessPolicy<br/>app-implemented]
+      SchemaValidator[SchemaValidator<br/>app-implemented]
+    end
+    subgraph core [Existing Core]
+      Node[Node<br/>libp2p + DHT + Auth]
+      StoreForward[Store-and-Forward]
+      Group[group.Service]
+    end
+  end
+  AppCode -->|"as local DB"| DeviceDB
+  AppCode -->|"shared data only"| GSLayer
+  DeviceDB --> RepEngine
+  RepEngine -->|"to same-DID devices"| Node
+  GSLayer -->|"to group members"| Node
+  GSLayer --> Group
+  Channel --> AccessPolicy
+  Channel --> SchemaValidator
+  Node --> StoreForward
+```
 
 ---
 
-## 7. Implementation and tests
+## 4. DeviceSync Package (core/internal/devicesync)
 
-- **Implementation:** [core/internal/syncdb](../core/internal/syncdb). `RecordStorage` interface and in-memory implementation (`NewMemStorage`), `MemberResolver` (`GroupStoreResolver` wrapping group.Store, excluding self DID), `SyncLayer` (`Put` / `HandleIncoming`). Node has `SendToGroup`. Payload is JSON for `SyncRecord`.
-- **Tests:** Unit (`sync_test.go`: meta attachment, store, SendToGroup call, last-write-wins apply, skip older timestamp, Delete on Deleted), integration (`test/integration/syncdb_test.go`: 2 nodes + 1 group, A Puts → B receives and applies to storage).
-- **Details:** See “2. Node SendToGroup,” “3. Sync DB,” “4. Integration tests” in [Group and Sync DB implementation](group-syncdb-implementation.en.md).
+### 4.1 Types
+
+```go
+type ChangeEntry struct {
+    Seq       uint64 // monotonically increasing sequence per device
+    Timestamp int64  // milliseconds
+    Table     string // logical table (namespace)
+    RecordID  string // unique key within table
+    Op        Op     // Put | Delete
+    Body      []byte // payload (Put only)
+}
+
+type Record struct {
+    ID, Table string
+    Body      []byte
+    Timestamp int64
+}
+```
+
+### 4.2 DeviceStorage Interface
+
+```go
+type DeviceStorage interface {
+    Put(ctx, table, id string, body []byte, timestamp int64) (seq uint64, err error)
+    Get(ctx, table, id string) (*Record, error)
+    Delete(ctx, table, id string, timestamp int64) (seq uint64, err error)
+    List(ctx, table string) ([]*Record, error)
+    GetTimestamp(ctx, table, id string) (int64, error)
+    AppendChange(ctx, entry *ChangeEntry) error
+    ChangesSince(ctx, since uint64) ([]*ChangeEntry, error)
+    LatestSeq(ctx) (uint64, error)
+}
+```
+
+### 4.3 ReplicationEngine
+
+- **Put(table, id, body):** Store locally → broadcast ChangeEntry as JSON to all peer devices
+- **Delete(table, id):** Delete locally → broadcast ChangeEntry (OpDelete)
+- **Get / List:** Read directly from local storage (no network)
+- **HandleIncoming(entry):** Apply with last-write-wins (timestamp comparison). Skip older changes.
+
+### 4.4 Test Coverage: **18 tests, 91.1%**
+
+---
+
+## 5. GroupShare Package (core/internal/groupshare)
+
+### 5.1 Types
+
+```go
+type Channel struct {
+    Name    string
+    GroupID string
+    Schema  SchemaValidator // nil = accept any body
+    Access  AccessPolicy    // nil = allow all
+}
+
+type SchemaValidator interface { Validate(body []byte) error }
+type AccessPolicy interface { CanWrite(did string) bool; CanRead(did string) bool }
+
+type SharedRecord struct {
+    ID, Channel, GroupID, DID string
+    Timestamp                 int64
+    Body                      []byte
+    Deleted                   bool
+}
+```
+
+### 5.2 SharedStorage Interface
+
+```go
+type SharedStorage interface {
+    PutShared(ctx, record *SharedRecord) error
+    GetShared(ctx, channel, id string) (*SharedRecord, error)
+    GetTimestamp(ctx, channel, id string) (int64, error)
+    DeleteShared(ctx, channel, id string) error
+    ListByChannel(ctx, channel string) ([]*SharedRecord, error)
+}
+```
+
+### 5.3 GroupShareLayer
+
+- **RegisterChannel(ch):** Register a channel. Duplicate returns `ErrChannelExists`
+- **Put(channel, id, body):** Check AccessPolicy.CanWrite → attach meta → store → broadcast to group members
+- **Delete(channel, id):** Delete from storage → broadcast SharedRecord with Deleted=true
+- **HandleIncoming(payload):** JSON decode → CanRead check → Schema validate → last-write-wins apply
+
+### 5.4 Test Coverage: **17 tests, 88.5%**
+
+---
+
+## 6. Migration from Old syncdb
+
+| Old syncdb | New package | Notes |
+|------------|-------------|-------|
+| `SyncLayer` | `devicesync.ReplicationEngine` + `groupshare.GroupShareLayer` | Split into two |
+| `SyncRecord` | `devicesync.ChangeEntry` + `groupshare.SharedRecord` | Separated by purpose |
+| `RecordStorage` | `devicesync.DeviceStorage` + `groupshare.SharedStorage` | Added List etc. |
+| `MemStorage` | `devicesync.MemStorage` + `groupshare.MemSharedStorage` | Dedicated per package |
+| `GroupStoreResolver` | `groupshare.MemberResolver` | Redefined in GroupShare |
+
+Old `core/internal/syncdb` to be removed in Phase E.
+
+---
+
+## 7. Upcoming Implementation
+
+1. **Public API extension** (`pkg/linkself`): Add `DeviceDB()` / `GroupShare()` / `Groups()` to `Client`
+2. **Node protocol separation:** `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0`
+3. **daemon JSON-RPC extension:** `devicedb.*`, `groupshare.*`, `groups.*` methods
+4. **SQLite reference implementation:** For DeviceStorage / SharedStorage
+5. **Catch-up sync handshake:** DeviceSync SyncWith (exchange high-water marks → send missing entries)
+
+---
+
+## 8. Notes
+
+- **Timestamp:** Wall-clock milliseconds for last-write-wins. Extensible to logical time (Lamport) if NTP skew becomes an issue
+- **Permissions:** GroupShare AccessPolicy / SchemaValidator are implemented by the app layer. LinkSelf provides only abstract interfaces
+- **Groups:** group package unchanged. Only GroupShare uses it. DeviceSync does not use the group concept
+- **Storage:** All interface-based. Apps can use the SQLite reference implementation or inject their own

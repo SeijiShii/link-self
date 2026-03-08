@@ -1,143 +1,263 @@
-# 分散型ネットワークを DB として扱う設計計画
+# データ同期設計: DeviceSync / GroupShare 二層アーキテクチャ
 
-**日本語**（このページ）| [English](sync-db-plan.en.md)  
-**ステータス:** コア実装済み（同期レイヤ・ストレージ IF・インメモリ実装。SQLite 参照実装は未着手）  
-**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](group-concept.md)、[グループ・同期 DB 実装ドキュメント](group-syncdb-implementation.md)
-
----
-
-## 1. 目標
-
-- アプリからは「分散ネットワーク = DB」として扱う。
-- **汎用性を持たせるため、SQLite3 をラップした同期レイヤ**とする。**ストレージ部はインターフェース化**し、実装はアプリ側に委ねる。同期レイヤは「メタ付与・即時配信・後勝ち適用」のみを担当する。
-- **アプリ実装者**は (1) ストレージの実装（例: SQLite を用いた参照実装）を選択または自前実装し、(2) テーブル定義と CRUD をそのストレージに対して行う。同期用のメタ情報は同期レイヤが付与・管理する。
-- ユースケース: あるアプリをインストールしたユーザー群（グループ）が、Figma のようにドキュメントを編集し、データはアプリが選んだストレージ（例: SQLite）に保存され、同期レイヤがネットワークへ共有する。
-- **各レコードに ID, groupId, DID, Timestamp などのメタ情報が付与され、即時にネットワーク上のデバイスに共有**される。
-- 編集コンフリクトは **後勝ち（last-write-wins）** とする。
-- **編集・閲覧権限**の切り分けはアプリ側のレイヤーで行う（[グループの概念](group-concept.md) 参照）。コアのグループはメンバー・オーナーのライフサイクルのみを扱う。
+**日本語**（このページ）| [English](sync-db-plan.en.md)
+**ステータス:** DeviceSync / GroupShare コア実装済み（インメモリストレージ・テスト完了。SQLite 参照実装は未着手）
+**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](group-concept.md)、[永続化方針](linkself-data-persistence-plan.md)
 
 ---
 
-## 2. 現状の前提
+## 1. 背景と方針転換
 
-- [core/internal/node](core/internal/node/node.go): 送信は 1 対 1（SendMessage）およびグループ（SendToGroup 実装済み）。グループは [グループの概念](group-concept.md) に従い、メンバー DID のリストとして扱う。
-- [core/internal/storeforward](core/internal/storeforward/storeforward.go): オフライン時はキューに保存し、オンライン検知後に送信。
-- グループ = **メンバー DID のリスト**。groupId に紐づく DID リストは [core/internal/group](core/internal/group) の Store で保持し、同期レイヤは MemberResolver（group.Store ラップ）で取得する（[グループの概念](group-concept.md) 参照）。
+旧設計（単一 SyncLayer）では、グループメンバー全員にレコードを均一にブロードキャストしていた。しかし「自分のデバイス間」と「グループ内の他ユーザー間」ではデータ共有のセマンティクスが根本的に異なる。
+
+- **自分のデバイス間（同一 DID）**: ローカル DB のように全データが透過的に同期されるべき
+- **グループ間（異なる DID）**: サーバーサイド API のようにアプリが定義した共有データのみが権限に沿って流れるべき
+
+この方針転換により、旧 `syncdb` パッケージを廃止し、**`devicesync`** + **`groupshare`** の 2 パッケージで置換した。
 
 ---
 
-## 3. アーキテクチャ概要
+## 2. 概念モデル
+
+### 2.1 DeviceSync（同一 DID・複数デバイス間）
+
+```
+アプリ → DeviceDB.Put("contacts", id, body)
+          ↓ 自動的に
+       ChangeLog に記録 → 同一 DID の全デバイスにブロードキャスト
+          ↓ 受信側
+       last-write-wins で適用（アプリは同期を意識しない）
+```
+
+| 項目 | 内容 |
+|------|------|
+| **対象** | 同じ秘密鍵（= 同じ DID）を持つ複数デバイス |
+| **範囲** | アプリが書いた全データ（全テーブル・全レコード） |
+| **同期方式** | 書き込み時即座にブロードキャスト + 接続時の差分同期（ChangeLog ベース） |
+| **競合解決** | last-write-wins（タイムスタンプ） |
+| **グループ** | 不要。同一 DID なので group.Group は使わない |
+| **ピア発見** | DHT（同一 PeerID の複数アドレス）+ mDNS（LAN） |
+
+### 2.2 GroupShare（異なる DID 間）
+
+```
+アプリ → Channel を定義（名前・スキーマ・権限）
+       → GroupShare.Put(channel, id, body)
+          ↓ AccessPolicy.CanWrite(did) を検証
+       SharedRecord 作成 → グループメンバーにブロードキャスト
+          ↓ 受信側
+       SchemaValidator.Validate() + AccessPolicy.CanRead(did) → 適用 or 拒否
+```
+
+| 項目 | 内容 |
+|------|------|
+| **対象** | グループ内の異なる DID |
+| **範囲** | アプリが Channel として明示的に定義した共有データのみ |
+| **権限** | LinkSelf は `AccessPolicy` / `SchemaValidator` インターフェースを提供、アプリが実装 |
+| **同期方式** | Channel 経由の Put 時にブロードキャスト + last-write-wins |
+| **グループ** | 既存の `group.Group` / `group.Service` をそのまま利用 |
+
+---
+
+## 3. アーキテクチャ
 
 ```mermaid
 flowchart TB
-  subgraph app [アプリ実装]
-    Tables[テーブル定義]
-    CRUD[CRUD 実装]
-    StorageImpl[ストレージ実装]
-    Tables --> CRUD
-    CRUD --> SyncLayer
-    StorageImpl -->|実装を注入| SyncLayer
+  subgraph app [アプリ層]
+    AppCode[アプリコード]
   end
-  subgraph sync [同期レイヤ]
-    SyncLayer[同期レイヤ]
-    StorageIF[ストレージ IF]
-    Meta[メタ付与 ID groupId DID Timestamp]
-    GroupSend[即時グループ配信]
-    SyncLayer --> StorageIF
-    SyncLayer --> Meta
-    Meta --> GroupSend
-    Recv[受信ハンドラ]
-    Recv --> Apply[適用と後勝ち解決]
-    Apply --> StorageIF
+  subgraph infra [LinkSelf インフラ]
+    subgraph ds [DeviceSync]
+      DeviceDB[DeviceDB<br/>Put/Get/Delete/List]
+      RepEngine[ReplicationEngine<br/>broadcast + last-write-wins]
+      ChangeLog[ChangeLog<br/>差分同期用]
+    end
+    subgraph gs [GroupShare]
+      GSLayer[GroupShareLayer<br/>Channel 管理]
+      Channel[Channel<br/>名前・スキーマ・権限]
+      AccessPolicy[AccessPolicy<br/>アプリ実装]
+      SchemaValidator[SchemaValidator<br/>アプリ実装]
+    end
+    subgraph core [既存コア]
+      Node[Node<br/>libp2p + DHT + Auth]
+      StoreForward[Store-and-Forward]
+      Group[group.Service]
+    end
   end
-  subgraph core [既存コア]
-    Node[Node]
-    Node --> GroupSend
-    Recv --> Node
-  end
-  GroupSend -->|SendToGroup per groupId| Node
-  Node -->|SetOnMessage| Recv
+  AppCode -->|"ローカルDBとして"| DeviceDB
+  AppCode -->|"共有データのみ"| GSLayer
+  DeviceDB --> RepEngine
+  RepEngine -->|"同一DIDデバイスへ"| Node
+  GSLayer -->|"グループメンバーへ"| Node
+  GSLayer --> Group
+  Channel --> AccessPolicy
+  Channel --> SchemaValidator
+  Node --> StoreForward
 ```
 
-- **アプリ実装者**は **ストレージの実装**（例: SQLite を用いた参照実装、または自前の永続化）を用意し、同期レイヤに注入する。テーブル定義と CRUD はそのストレージに対して行う。
-- **同期レイヤ**は **ストレージをインターフェース** として扱う。書き込み時に **各レコードに ID, groupId, DID, Timestamp などのメタ情報を付与**し、**即時に**その groupId に属するメンバーへ **SendToGroup** で共有する。受信時は同一レコード（同じ ID または table+pk）について **タイムスタンプが新しい方** のみストレージに適用する（後勝ち）。
+---
+
+## 4. DeviceSync パッケージ（core/internal/devicesync）
+
+### 4.1 型定義
+
+```go
+// ChangeEntry: ローカル書き込みの変更ログエントリ
+type ChangeEntry struct {
+    Seq       uint64 // 単調増加シーケンス（デバイスごと）
+    Timestamp int64  // ミリ秒
+    Table     string // テーブル名（名前空間）
+    RecordID  string // テーブル内の一意キー
+    Op        Op     // Put | Delete
+    Body      []byte // Put 時のペイロード
+}
+
+// Record: 保存済みレコード
+type Record struct {
+    ID, Table string
+    Body      []byte
+    Timestamp int64
+}
+```
+
+### 4.2 DeviceStorage インターフェース
+
+```go
+type DeviceStorage interface {
+    Put(ctx, table, id string, body []byte, timestamp int64) (seq uint64, err error)
+    Get(ctx, table, id string) (*Record, error)
+    Delete(ctx, table, id string, timestamp int64) (seq uint64, err error)
+    List(ctx, table string) ([]*Record, error)
+    GetTimestamp(ctx, table, id string) (int64, error)
+    // ChangeLog 操作
+    AppendChange(ctx, entry *ChangeEntry) error
+    ChangesSince(ctx, since uint64) ([]*ChangeEntry, error)
+    LatestSeq(ctx) (uint64, error)
+}
+```
+
+- Put / Delete はシーケンス番号を返し、ChangeLog に自動記録する
+- ChangesSince で差分同期（接続時の catch-up）に対応
+- インメモリ実装 `MemStorage` を同梱。SQLite 参照実装は Phase 2 後半で追加予定
+
+### 4.3 ReplicationEngine
+
+```go
+type ReplicationEngine struct {
+    Storage  DeviceStorage
+    Send     SendFunc       // ピアへの送信関数
+    Peers    PeerProvider   // 同一DIDの他デバイス一覧
+    SelfDID  string
+}
+```
+
+- **Put(table, id, body)**: ストレージに書き込み → ChangeEntry を JSON で全ピアにブロードキャスト
+- **Delete(table, id)**: ストレージから削除 → ChangeEntry（OpDelete）をブロードキャスト
+- **Get / List**: ストレージから直接読み取り（ネットワーク不要）
+- **HandleIncoming(entry)**: last-write-wins（Timestamp 比較）で適用。古い変更はスキップ
+
+### 4.4 テスト状況
+
+| カテゴリ | テスト数 | カバレッジ |
+|----------|----------|------------|
+| MemStorage | 8 | Put/Get/Delete/List/GetTimestamp/ChangeLog/Seq |
+| ReplicationEngine | 10 | Put broadcast / Get / Delete broadcast / List / HandleIncoming (new/LWW/delete/skip) / NoPeers |
+| **合計** | **18** | **91.1%** |
 
 ---
 
-## 4. 設計の要点
+## 5. GroupShare パッケージ（core/internal/groupshare）
 
-### 4.1 配置と依存
+### 5.1 型定義
 
-- **新パッケージ**: `core/pkg/syncdb`（または `core/internal/syncdb`）。同期レイヤ（メタ付与・即時配信・後勝ち適用）を提供。アプリと `node` の間に置く。
-- **依存**: 既存 node の **SendToGroup**（計画）／**SetOnMessage** を利用。**ストレージはインターフェース**として受け取り、実装はアプリが注入する。グループは [グループの概念](group-concept.md) に従い、**groupId に紐づくメンバー DID のリスト** として同期レイヤまたはアプリが保持する。
+```go
+// Channel: アプリが定義する共有データの単位
+type Channel struct {
+    Name    string
+    GroupID string
+    Schema  SchemaValidator // nil = 任意の body を受け入れ
+    Access  AccessPolicy    // nil = 全員許可
+}
 
-### 4.2 ストレージのインターフェース化
+// SchemaValidator / AccessPolicy: アプリが実装するインターフェース
+type SchemaValidator interface { Validate(body []byte) error }
+type AccessPolicy interface { CanWrite(did string) bool; CanRead(did string) bool }
 
-- **ストレージ部をインターフェース化**し、実装をアプリ側に委ねる。同期レイヤは「レコードの読み書き」「メタ（Timestamp 等）の取得・比較」に必要な最小限の操作だけをインターフェースで要求する。
-- **メリット**:
-  - **柔軟性**: アプリは SQLite の参照実装を使うことも、自前の永続化（別 DB・キーバリュー・ファイル）を渡すこともできる。
-  - **テスト容易性**: テスト時はインメモリ実装やモックを注入すれば、ネットワークや永続化に依存しない単体テストが可能。
-  - **責務の分離**: 同期レイヤは「メタ付与・配信・後勝ち適用」に専念し、永続化の詳細（SQLite かどうか、暗号化の有無など）はアプリに任せられる。
-- **インターフェースの契約（案）**: レコードの Put / Get / Delete、および同一キーに対する既存レコードの Timestamp 取得ができればよい。テーブル＋主キー、またはレコード ID をキーとする形で定義する。
-- **参照実装**: SQLite を用いたストレージ実装を同梱または別パッケージで提供する。アプリはそれをそのまま使うか、ラップして暗号化・圧縮などを追加できる。アプリが「SQLite のテーブル定義と CRUD をそのまま書きたい」場合は、この参照実装を注入すればよい。
+// SharedRecord: グループ間で共有されるレコード
+type SharedRecord struct {
+    ID, Channel, GroupID, DID string
+    Timestamp                 int64
+    Body                      []byte
+    Deleted                   bool
+}
+```
 
-### 4.3 拡張 SQLite ラッパの形態（参照実装として）
+### 5.2 SharedStorage インターフェース
 
-- アプリが **SQLite をそのまま使いたい** 場合は、**ストレージの参照実装として「SQLite をラップしたストレージ」** を用意する。アプリはその参照実装を同期レイヤに渡し、テーブル定義と CRUD は従来どおり SQLite に対して行う。
-- **実現方法**: (A) 標準 SQLite ドライバをラップし、**update hook / commit hook** で INSERT/UPDATE/DELETE を検出して同期レイヤに通知し、メタ付与・即時配信する。(B) 同期対象テーブルに **メタ列（id, group_id, did, timestamp）を必須とするスキーマ規約** を定め、参照実装がそれらを DEFAULT またはトリガで埋め、コミット時に変更行を同期レイヤに渡す。
-- **制約**: 同期対象のテーブルは **主キーが定義されている** ことを前提とする（コンフリクト単位のため）。
+```go
+type SharedStorage interface {
+    PutShared(ctx, record *SharedRecord) error
+    GetShared(ctx, channel, id string) (*SharedRecord, error)
+    GetTimestamp(ctx, channel, id string) (int64, error)
+    DeleteShared(ctx, channel, id string) error
+    ListByChannel(ctx, channel string) ([]*SharedRecord, error)
+}
+```
 
-### 4.4 各レコードのメタ情報と即時共有
+### 5.3 GroupShareLayer
 
-| メタ項目 | 内容 |
-|----------|------|
-| **ID** | レコード一意（例: UUID）。同一レコードの競合判定に使用。 |
-| **groupId** | どのグループに属するか。配信先（そのグループのメンバー DID 一覧）の決定に使用。 |
-| **DID** | そのレコードを書いたユーザー（ノード）の DID。 |
-| **Timestamp** | 更新時刻（ミリ秒）。後勝ち比較に使用。 |
+```go
+type GroupShareLayer struct {
+    Storage        SharedStorage
+    MemberResolver MemberResolver // groupID → メンバー DID（自分除外）
+    SendGroup      SendGroupFunc  // DID リストへの送信
+    SelfDID        string
+    channels       map[string]*Channel
+}
+```
 
-- 書き込みがコミットされると、**変更されたレコード**（行）を上記メタ付きでシリアライズし、**即時に** その groupId に属するメンバー（DID リスト）へ **SendToGroup** で配信する。
-- ペイロード形式: レコード内容 + メタ（id, groupId, DID, Timestamp）を JSON などで符号化。受信側は同じスキーマのテーブルに **Timestamp による後勝ち** で適用する。
+- **RegisterChannel(ch)**: Channel を登録。重複は `ErrChannelExists`
+- **Put(channel, id, body)**: AccessPolicy.CanWrite チェック → メタ付与 → ストレージ保存 → グループメンバーにブロードキャスト
+- **Delete(channel, id)**: ストレージ削除 → Deleted=true の SharedRecord をブロードキャスト
+- **HandleIncoming(payload)**: JSON デコード → AccessPolicy.CanRead チェック → SchemaValidator.Validate → last-write-wins で適用
 
-### 4.5 グループ配信（即時共有）
+### 5.4 テスト状況
 
-- コアの送信 API は **SendToGroup(ctx, memberDIDs, payload)** を想定。**groupId に紐づくメンバー DID のリスト** を拡張側が保持し、レコードのコミット時に **その groupId に属する各 DID に対して即時配信**する。
-- オフラインの相手は既存の **Store-and-Forward** により、オンラインになったタイミングで届く。
-
-### 4.6 受信・適用と後勝ち
-
-- **SetOnMessage** に登録するコールバックで、受信バイト列を「レコード + メタ（ID, groupId, DID, Timestamp）」としてデコード。
-- **適用**: **ストレージインターフェース** 経由で、レコード内容に従い Put / Delete を呼ぶ。ストレージの実装（SQLite 参照実装など）が実際の INSERT/UPDATE/DELETE を行う。
-- **後勝ち**: 同じ **レコード ID**（または table + primary_key）に対して、ストレージから既存の Timestamp を取得し、**受信レコードの Timestamp が既存より大きい場合のみ** 適用。同じまたは古い場合はスキップ。
-- 初回適用時やメタが無い場合は「適用する」でよい。
-
-### 4.7 スキーマ・メタデータ
-
-- 同期対象テーブルに **主キー必須** をドキュメントで明示。
-- **メタ列**: アプリは同期対象テーブルに **ID, groupId, DID, Timestamp** などのメタ列を定義する（規約名例: `_sync_id`, `_group_id`, `_did`, `_timestamp`）。拡張ドライバが INSERT/UPDATE 時に未指定分を補完し、即時共有に使用する。
-
----
-
-## 5. 注意点・他計画との整合
-
-- **グループの発見**: 誰がグループに属するかは [グループの概念](group-concept.md) に従い、メンバーリストは各ノードがローカルに保持する。**メンバー DID リストはアプリが用意し、SyncDB に渡す**形になる（招待フローはアプリまたは別フェーズで定義）。
-- **権限**: ドキュメントの編集・閲覧権限の切り分けは**アプリ側のレイヤー**で行う。コアのグループ概念はメンバー・オーナーのライフサイクルのみを扱う。
-- **順序**: メッセージ到着順と実時間順は一致しないため、**後勝ちは必ず timestamp で比較**し、到着順で上書きしない。
-- **タイムスタンプ**: 実装では NTP ずれを考慮するなら論理時刻（Lamport など）も選択肢。まずは実時刻（ミリ秒）で後勝ちを実装し、必要なら拡張可能にしておく。
-
----
-
-## 6. まとめ
-
-- **同期レイヤ**を node の上に追加する。**ストレージ部はインターフェース化**し、実装はアプリに委ねる。アプリは SQLite の参照実装を注入するか、自前の永続化を渡す。
-- 同期レイヤは **メタ付与・即時配信・後勝ち適用** のみを担当する。各レコードに ID, groupId, DID, Timestamp を付与し、コミット時に **即時に** ネットワーク上のデバイス（その groupId に属するメンバー DID）へ SendToGroup で共有する。
-- 受信側では **レコード単位で Timestamp 比較** し、**後勝ち** でストレージインターフェース経由で適用する。
-- グループは [グループの概念](group-concept.md) に従い、**groupId に紐づくメンバー DID のリスト** として同期レイヤまたはアプリが保持する。
+| カテゴリ | テスト数 | カバレッジ |
+|----------|----------|------------|
+| MemSharedStorage | 5 | PutAndGet/GetNotFound/GetTimestamp/Delete/ListByChannel |
+| GroupShareLayer | 12 | RegisterChannel/Put+broadcast/PutDenied/PutUnregistered/Get/Delete/List/HandleIncoming (new/LWW/delete/schemaReject/readDenied) |
+| **合計** | **17** | **88.5%** |
 
 ---
 
-## 7. 実装とテスト
+## 6. 旧 syncdb との対応
 
-- **実装**: [core/internal/syncdb](../core/internal/syncdb)。`RecordStorage` インターフェースとインメモリ実装（`NewMemStorage`）、`MemberResolver`（`GroupStoreResolver` で group.Store をラップ、自 DID 除外）、`SyncLayer`（`Put` / `HandleIncoming`）。node に `SendToGroup` を追加済み。ペイロードは `SyncRecord` の JSON。
-- **テスト**: 単体（`sync_test.go`: メタ付与・保存・SendToGroup 呼び出し、後勝ち適用・古いタイムスタンプスキップ・Deleted 時の Delete）、統合（`test/integration/syncdb_test.go`: 2 ノード + 1 グループで A が Put → B が受信してストレージに反映）。
-- **詳細**: [グループ・同期 DB 実装ドキュメント](group-syncdb-implementation.md) の「2. ノードの SendToGroup」「3. 同期 DB」「4. 統合テスト」を参照。
+| 旧 syncdb | 新パッケージ | 備考 |
+|------------|-------------|------|
+| `SyncLayer` | `devicesync.ReplicationEngine` + `groupshare.GroupShareLayer` | 2 つに分離 |
+| `SyncRecord` | `devicesync.ChangeEntry` + `groupshare.SharedRecord` | 用途に応じて分離 |
+| `RecordStorage` | `devicesync.DeviceStorage` + `groupshare.SharedStorage` | List 操作等を追加 |
+| `MemStorage` | `devicesync.MemStorage` + `groupshare.MemSharedStorage` | 各パッケージに専用 |
+| `GroupStoreResolver` | `groupshare.MemberResolver` | GroupShare 側で再定義 |
+
+旧 `core/internal/syncdb` は Phase E で削除予定。
+
+---
+
+## 7. 今後の実装予定
+
+1. **公開 API 拡張** (`pkg/linkself`): `Client` に `DeviceDB()` / `GroupShare()` / `Groups()` を追加
+2. **Node プロトコル分離**: `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0` を追加
+3. **daemon JSON-RPC 拡張**: `devicedb.*`, `groupshare.*`, `groups.*` メソッド
+4. **SQLite 参照実装**: DeviceStorage / SharedStorage の SQLite 実装
+5. **差分同期ハンドシェイク**: DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
+
+---
+
+## 8. 注意点
+
+- **タイムスタンプ**: 実時刻（ミリ秒）で後勝ち。NTP ずれが問題になる場合は論理時刻（Lamport 等）への拡張を検討
+- **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
+- **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
+- **ストレージ**: 全てインターフェース化。アプリは SQLite 参照実装を使うか、自前で実装を注入できる
