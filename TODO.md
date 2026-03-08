@@ -8,7 +8,7 @@
 
 - **LinkSelf**: 主権ある個人のための**サーバー不要の P2P インフラ**。DID（did:key）、libp2p DHT、Store-and-Forward、エンドツーエンド暗号化。
 - **リポジトリ**: Go コア（ライブラリ＋daemon）、サンプルチャットアプリ（Electron）、設計・計画ドキュメントを包含。
-- **ライセンス**: Apache-2.0。Gitcoin Grants での寄付募集を予定。
+- **ライセンス**: Apache-2.0。
 
 ---
 
@@ -45,7 +45,6 @@ link-self/
     ├── sync-db-plan.md        # DeviceSync / GroupShare 二層アーキテクチャ設計
     ├── sample-chat-app-plan.md # サンプルアプリ（チャット＋ファイル共有）計画
     ├── using-linkself-as-library.md
-    ├── gitcoin-funding.md
     └── roadmap-revision-plan.md
 ```
 
@@ -97,7 +96,6 @@ link-self/
 | 全体説明・ロードマップ（README, docs/README.*） | ✅ | 日英あり |
 | Phase 1 設計・グループ概念・sync-db 計画・サンプルアプリ計画 | ✅ | 計画・設計として記載済み |
 | ライブラリ利用（using-linkself-as-library） | ✅ | 道筋のドキュメントあり |
-| Gitcoin 手順（gitcoin-funding） | ✅ | 申請手順を記載 |
 | CONTRIBUTING / CODE_OF_CONDUCT | 🔲 オプション | roadmap-revision-plan で言及 |
 
 ---
@@ -138,7 +136,6 @@ link-self/
 - [ ] **Core API 進化**: SendToGroup / ConnectToGroup への移行（core/README 記載の計画）
 - [ ] **マルチプラットフォーム**: build:daemon のバイナリ名・パスを OS 別にし、chat-client の起動パスを拡張
 - [ ] **ドキュメント**: CONTRIBUTING.md / CODE_OF_CONDUCT.md の追加（任意）
-- [ ] **Gitcoin**: グラントページ作成・ラウンド申請（gitcoin-funding 手順参照）
 
 ---
 

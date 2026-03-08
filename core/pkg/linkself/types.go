@@ -254,4 +254,84 @@ type Client interface {
 	// SetOnMessageが複数回呼び出された場合、最後のハンドラのみが使用されます。
 	// nilで呼び出された場合、メッセージ処理は無効になります。
 	SetOnMessage(handler MessageHandler)
+
+	// DeviceDB returns the DeviceDB interface for private cross-device sync.
+	// Returns nil if the node is not started.
+	DeviceDB() DeviceDB
+
+	// GroupShare returns the GroupShareAPI for group-shared data.
+	// Returns nil if the node is not started.
+	GroupShare() GroupShareAPI
+
+	// Groups returns the GroupAPI for group management.
+	// Returns nil if the node is not started.
+	Groups() GroupAPI
+}
+
+// DeviceDB provides private data sync across devices sharing the same DID.
+// All writes are automatically replicated to other devices via DeviceSync.
+type DeviceDB interface {
+	// Put stores a record in the given table. Replicated to all devices.
+	Put(ctx context.Context, table, recordID string, body []byte) error
+
+	// Get retrieves a record by table and ID. Returns nil, nil if not found.
+	Get(ctx context.Context, table, recordID string) (*Record, error)
+
+	// Delete marks a record as deleted. Replicated to all devices.
+	Delete(ctx context.Context, table, recordID string) error
+
+	// List returns all records in a table.
+	List(ctx context.Context, table string) ([]*Record, error)
+}
+
+// GroupShareAPI provides shared data channels for groups of different DIDs.
+type GroupShareAPI interface {
+	// RegisterChannel registers a named channel bound to a group.
+	RegisterChannel(name, groupID string) error
+
+	// Put stores a shared record in a channel. Broadcast to group members.
+	Put(ctx context.Context, channel, recordID string, body []byte) error
+
+	// Get retrieves a shared record by channel and ID. Returns nil, nil if not found.
+	Get(ctx context.Context, channel, recordID string) (*SharedRecord, error)
+
+	// Delete marks a shared record as deleted. Broadcast to group members.
+	Delete(ctx context.Context, channel, recordID string) error
+
+	// List returns all records in a channel.
+	List(ctx context.Context, channel string) ([]*SharedRecord, error)
+}
+
+// GroupAPI manages groups (membership, ownership).
+type GroupAPI interface {
+	// CreateGroup creates a new group with the given member DIDs.
+	// The creator (this node's DID) is automatically included and set as owner.
+	CreateGroup(ctx context.Context, memberDIDs []string) (groupID string, err error)
+
+	// AddMember adds a member to a group. Requires owner permission.
+	AddMember(ctx context.Context, groupID, memberDID string) error
+
+	// Leave removes this node from the group.
+	Leave(ctx context.Context, groupID string) error
+
+	// ListGroups returns all group IDs this node belongs to.
+	ListGroups(ctx context.Context) ([]string, error)
+}
+
+// Record represents a stored item in DeviceDB.
+type Record struct {
+	ID        string
+	Table     string
+	Body      []byte
+	Timestamp int64
+}
+
+// SharedRecord represents a shared item in GroupShare.
+type SharedRecord struct {
+	ID        string
+	Channel   string
+	GroupID   string
+	DID       string // writer's DID
+	Body      []byte
+	Timestamp int64
 }

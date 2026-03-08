@@ -7,7 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/SeijiShii/link-self/core/internal/devicesync"
 	"github.com/SeijiShii/link-self/core/internal/did"
+	"github.com/SeijiShii/link-self/core/internal/envelope"
+	"github.com/SeijiShii/link-self/core/internal/group"
+	"github.com/SeijiShii/link-self/core/internal/groupshare"
 	"github.com/SeijiShii/link-self/core/internal/node"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,8 +21,11 @@ import (
 // This is the only place where internal packages are accessed.
 // All other code should use the Client interface instead of this concrete type.
 type client struct {
-	node     *node.Node
-	identity *did.Identity
+	node       *node.Node
+	identity   *did.Identity
+	deviceDB   *deviceDB
+	groupShare *groupShareAPI
+	groups     *groupAPI
 }
 
 // NewClient creates a new LinkSelf client.
@@ -91,6 +98,56 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	c.node = n
 	c.identity = identity
 
+	// Wire DeviceSync layer (no peers initially — single device).
+	dsStorage := devicesync.NewMemStorage()
+	dsEngine := &devicesync.ReplicationEngine{
+		Storage: dsStorage,
+		SelfDID: identity.DID,
+		Send: func(ctx context.Context, peerID string, payload []byte) error {
+			wrapped, err := envelope.Wrap(envelope.TypeDeviceSync, payload)
+			if err != nil {
+				return err
+			}
+			pid, err := peer.Decode(peerID)
+			if err != nil {
+				return err
+			}
+			return n.SendToPeerID(ctx, pid, wrapped)
+		},
+	}
+	c.deviceDB = &deviceDB{engine: dsEngine}
+
+	// Wire Group layer.
+	groupStore := group.NewMemStore()
+	groupService := group.NewService(groupStore)
+	c.groups = &groupAPI{
+		service: groupService,
+		store:   groupStore,
+		selfDID: identity.DID,
+	}
+
+	// Wire GroupShare layer.
+	gsStorage := groupshare.NewMemSharedStorage()
+	gsResolver := &memberResolverAdapter{store: groupStore, selfDID: identity.DID}
+	gsLayer := groupshare.NewGroupShareLayer(
+		gsStorage,
+		gsResolver,
+		func(ctx context.Context, memberDIDs []string, payload []byte) error {
+			wrapped, err := envelope.Wrap(envelope.TypeGroupShare, payload)
+			if err != nil {
+				return err
+			}
+			return n.SendToGroup(ctx, memberDIDs, wrapped)
+		},
+		identity.DID,
+	)
+	c.groupShare = &groupShareAPI{layer: gsLayer}
+
+	// Wire incoming message handlers.
+	n.SetOnGroupShare(func(peerDID string, payload []byte) {
+		_ = gsLayer.HandleIncoming(context.Background(), payload)
+	})
+
 	// Get listen address
 	listenAddr := ""
 	if len(n.Host.Addrs()) > 0 {
@@ -162,6 +219,30 @@ func (c *client) SetOnMessage(handler MessageHandler) {
 	if c.node != nil {
 		c.node.SetOnMessage(handler)
 	}
+}
+
+// DeviceDB returns the DeviceDB interface. Returns nil before Start.
+func (c *client) DeviceDB() DeviceDB {
+	if c.deviceDB == nil {
+		return nil
+	}
+	return c.deviceDB
+}
+
+// GroupShare returns the GroupShareAPI interface. Returns nil before Start.
+func (c *client) GroupShare() GroupShareAPI {
+	if c.groupShare == nil {
+		return nil
+	}
+	return c.groupShare
+}
+
+// Groups returns the GroupAPI interface. Returns nil before Start.
+func (c *client) Groups() GroupAPI {
+	if c.groups == nil {
+		return nil
+	}
+	return c.groups
 }
 
 // loadOrGenerateIdentity loads an identity from file or generates a new one.
