@@ -86,12 +86,21 @@ npm run build:daemon
 npm run dev
 ```
 
+## アーキテクチャ
+
+```
+Renderer (React) ←IPC→ Main Process (Electron) ←JSON-RPC/stdin→ linkself-daemon (Go)
+```
+
+- **P2P 通信**: 公開 DHT（libp2p）経由でピア発見・接続・メッセージ送受信が動作済み
+- **データ永続化**: 連絡先・友達申請は **DeviceDB**（daemon 内の DeviceSync レイヤー）に保存。将来的にクロスデバイス自動同期に対応
+- **daemon RPC メソッド**: `start`, `stop`, `getMyDID`, `sendMessage`, `connect`, `devicedb.*`, `groupshare.*`, `groups.*`
+
 ## 注意事項
 
-- この段階では**モック表示まで**。実際のP2P通信は後続フェーズで実装
-- identityは `~/.linkself/identity.json` に保存されます
-- Windows環境での動作を優先（他のプラットフォームは後続）
-- **LinkSelf daemon** のソースは **core 内（core/cmd/linkself-daemon）** にのみあります。chat-client 内に daemon ディレクトリはありません
+- identityは `<userData>/identity.json` に保存されます
+- Windows / WSL 環境での動作を優先（他のプラットフォームは後続）
+- **LinkSelf daemon** のソースは **core 内（core/cmd/linkself-daemon）** にのみあります。chat-client 内に daemon ソースはありません
 
 ## ドキュメント
 

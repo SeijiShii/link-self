@@ -33,7 +33,10 @@
 //	err = client.SendMessage(ctx, peerDID, "Hello!")
 package linkself
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Config holds configuration for creating a LinkSelf node.
 //
@@ -320,18 +323,18 @@ type GroupAPI interface {
 
 // Record represents a stored item in DeviceDB.
 type Record struct {
-	ID        string
-	Table     string
-	Body      []byte
-	Timestamp int64
+	ID        string          `json:"id"`
+	Table     string          `json:"table"`
+	Body      json.RawMessage `json:"body"`
+	Timestamp int64           `json:"timestamp"`
 }
 
 // SharedRecord represents a shared item in GroupShare.
 type SharedRecord struct {
-	ID        string
-	Channel   string
-	GroupID   string
-	DID       string // writer's DID
-	Body      []byte
-	Timestamp int64
+	ID        string          `json:"id"`
+	Channel   string          `json:"channel"`
+	GroupID   string          `json:"groupID"`
+	DID       string          `json:"did"`
+	Body      json.RawMessage `json:"body"`
+	Timestamp int64           `json:"timestamp"`
 }
