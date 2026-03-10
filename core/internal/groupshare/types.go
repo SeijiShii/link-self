@@ -4,7 +4,10 @@
 // members, following app-defined permissions.
 package groupshare
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // SchemaValidator validates a record body before accepting it.
 // Provided by the app.
@@ -21,16 +24,18 @@ type AccessPolicy interface {
 
 // Channel defines a named data stream shared within a group.
 type Channel struct {
-	Name    string
-	GroupID string
-	Schema  SchemaValidator // nil = accept any body
-	Access  AccessPolicy    // nil = allow all
+	Name      string
+	GroupID   string
+	Schema    SchemaValidator // nil = accept any body
+	Access    AccessPolicy    // nil = allow all
+	Retention time.Duration   // 0 = permanent (master data)
 }
 
 // SharedRecord is the unit of data exchanged between group members.
 type SharedRecord struct {
 	ID        string `json:"id"`
 	Channel   string `json:"channel"`
+	Topic     string `json:"topic,omitempty"` // topic for subscription filtering
 	GroupID   string `json:"group_id"`
 	DID       string `json:"did"`       // writer's DID
 	Timestamp int64  `json:"timestamp"` // milliseconds
@@ -45,6 +50,7 @@ type SharedStorage interface {
 	GetTimestamp(ctx context.Context, channel, id string) (int64, error)
 	DeleteShared(ctx context.Context, channel, id string) error
 	ListByChannel(ctx context.Context, channel string) ([]*SharedRecord, error)
+	ListByGroup(ctx context.Context, groupID string) ([]*SharedRecord, error)
 }
 
 // MemberResolver returns the member DIDs for a group, excluding self.
@@ -54,3 +60,10 @@ type MemberResolver interface {
 
 // SendGroupFunc sends a payload to a list of DIDs.
 type SendGroupFunc func(ctx context.Context, memberDIDs []string, payload []byte) error
+
+// SubAnnouncement is the message sent to peers to announce subscription changes.
+type SubAnnouncement struct {
+	DID     string   `json:"did"`
+	Channel string   `json:"channel"`
+	Topics  []string `json:"topics"`
+}

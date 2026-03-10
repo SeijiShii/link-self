@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/SeijiShii/link-self/core/pkg/linkself"
 )
@@ -85,12 +86,18 @@ type DeviceDBListParams struct {
 
 // GroupShare params
 type GroupShareRegisterParams struct {
+	Channel   string `json:"channel"`
+	GroupID   string `json:"groupID"`
+	Retention string `json:"retention,omitempty"` // e.g. "720h" for 30 days; empty = permanent
+}
+
+type GroupSharePurgeParams struct {
 	Channel string `json:"channel"`
-	GroupID string `json:"groupID"`
 }
 
 type GroupSharePutParams struct {
 	Channel  string          `json:"channel"`
+	Topic    string          `json:"topic"`
 	RecordID string          `json:"recordID"`
 	Body     json.RawMessage `json:"body"`
 }
@@ -102,11 +109,25 @@ type GroupShareGetParams struct {
 
 type GroupShareDeleteParams struct {
 	Channel  string `json:"channel"`
+	Topic    string `json:"topic"`
 	RecordID string `json:"recordID"`
+}
+
+type GroupShareSubscribeParams struct {
+	Channel string   `json:"channel"`
+	Topics  []string `json:"topics"`
 }
 
 type GroupShareListParams struct {
 	Channel string `json:"channel"`
+}
+
+type GroupShareDumpParams struct {
+	GroupID string `json:"groupID"`
+}
+
+type GroupShareRestoreParams struct {
+	Records []*linkself.SharedRecord `json:"records"`
 }
 
 // Groups params
@@ -181,6 +202,8 @@ func handleRequest(req *JSONRPCRequest) {
 		handleDeviceDBList(req)
 	case "groupshare.register":
 		handleGroupShareRegister(req)
+	case "groupshare.subscribe":
+		handleGroupShareSubscribe(req)
 	case "groupshare.put":
 		handleGroupSharePut(req)
 	case "groupshare.get":
@@ -189,6 +212,12 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGroupShareDelete(req)
 	case "groupshare.list":
 		handleGroupShareList(req)
+	case "groupshare.dump":
+		handleGroupShareDump(req)
+	case "groupshare.restore":
+		handleGroupShareRestore(req)
+	case "groupshare.purge":
+		handleGroupSharePurge(req)
 	case "groups.create":
 		handleGroupsCreate(req)
 	case "groups.addMember":
@@ -416,6 +445,21 @@ func handleDeviceDBList(req *JSONRPCRequest) {
 
 // --- GroupShare handlers ---
 
+func handleGroupShareSubscribe(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params GroupShareSubscribeParams
+	if !parseParams(req, &params) {
+		return
+	}
+	if err := linkSelfClient.GroupShare().Subscribe(params.Channel, params.Topics); err != nil {
+		sendError(req.ID, -32000, "groupshare.subscribe failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, nil)
+}
+
 func handleGroupShareRegister(req *JSONRPCRequest) {
 	if !requireClient(req) {
 		return
@@ -424,7 +468,16 @@ func handleGroupShareRegister(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().RegisterChannel(params.Channel, params.GroupID); err != nil {
+	var opts []linkself.ChannelOption
+	if params.Retention != "" {
+		d, err := time.ParseDuration(params.Retention)
+		if err != nil {
+			sendError(req.ID, -32602, "invalid retention duration", err.Error())
+			return
+		}
+		opts = append(opts, linkself.WithRetention(d))
+	}
+	if err := linkSelfClient.GroupShare().RegisterChannel(params.Channel, params.GroupID, opts...); err != nil {
 		sendError(req.ID, -32000, "groupshare.register failed", err.Error())
 		return
 	}
@@ -439,7 +492,7 @@ func handleGroupSharePut(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().Put(ctx, params.Channel, params.RecordID, params.Body); err != nil {
+	if err := linkSelfClient.GroupShare().Put(ctx, params.Channel, params.Topic, params.RecordID, params.Body); err != nil {
 		sendError(req.ID, -32000, "groupshare.put failed", err.Error())
 		return
 	}
@@ -470,7 +523,7 @@ func handleGroupShareDelete(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().Delete(ctx, params.Channel, params.RecordID); err != nil {
+	if err := linkSelfClient.GroupShare().Delete(ctx, params.Channel, params.Topic, params.RecordID); err != nil {
 		sendError(req.ID, -32000, "groupshare.delete failed", err.Error())
 		return
 	}
@@ -491,6 +544,54 @@ func handleGroupShareList(req *JSONRPCRequest) {
 		return
 	}
 	sendResponse(req.ID, recs)
+}
+
+func handleGroupShareDump(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params GroupShareDumpParams
+	if !parseParams(req, &params) {
+		return
+	}
+	recs, err := linkSelfClient.GroupShare().Dump(ctx, params.GroupID)
+	if err != nil {
+		sendError(req.ID, -32000, "groupshare.dump failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, recs)
+}
+
+func handleGroupShareRestore(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params GroupShareRestoreParams
+	if !parseParams(req, &params) {
+		return
+	}
+	applied, err := linkSelfClient.GroupShare().Restore(ctx, params.Records)
+	if err != nil {
+		sendError(req.ID, -32000, "groupshare.restore failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]int{"applied": applied})
+}
+
+func handleGroupSharePurge(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params GroupSharePurgeParams
+	if !parseParams(req, &params) {
+		return
+	}
+	purged, err := linkSelfClient.GroupShare().Purge(ctx, params.Channel)
+	if err != nil {
+		sendError(req.ID, -32000, "groupshare.purge failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]int{"purged": purged})
 }
 
 // --- Groups handlers ---

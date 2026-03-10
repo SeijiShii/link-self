@@ -141,11 +141,24 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		},
 		identity.DID,
 	)
+	// Wire subscription stores: LocalSubs persisted via DeviceSync (auto-replicated to same-DID devices).
+	gsLayer.LocalSubs = groupshare.NewDeviceSyncSubscriptionStore(dsEngine)
+	gsLayer.RemoteSubs = groupshare.NewMemSubscriptionStore()
+	gsLayer.SendSubAnnounce = func(ctx context.Context, memberDIDs []string, payload []byte) error {
+		wrapped, err := envelope.Wrap(envelope.TypeSubAnnounce, payload)
+		if err != nil {
+			return err
+		}
+		return n.SendToGroup(ctx, memberDIDs, wrapped)
+	}
 	c.groupShare = &groupShareAPI{layer: gsLayer}
 
 	// Wire incoming message handlers.
 	n.SetOnGroupShare(func(peerDID string, payload []byte) {
 		_ = gsLayer.HandleIncoming(context.Background(), payload)
+	})
+	n.SetOnSubAnnounce(func(peerDID string, payload []byte) {
+		_ = gsLayer.HandleSubAnnouncement(peerDID, payload)
 	})
 
 	// Get listen address

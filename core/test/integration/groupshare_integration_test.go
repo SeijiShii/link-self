@@ -141,7 +141,7 @@ func TestGroupShare_ChannelBroadcast(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Alice puts a shared record.
-	if err := layerAlice.Put(ctx, "notes", "note1", []byte(`{"text":"Hello from Alice"}`)); err != nil {
+	if err := layerAlice.Put(ctx, "notes", "", "note1", []byte(`{"text":"Hello from Alice"}`)); err != nil {
 		t.Fatalf("layerAlice.Put: %v", err)
 	}
 
@@ -166,7 +166,7 @@ func TestGroupShare_ChannelBroadcast(t *testing.T) {
 	}
 
 	// Bob puts a record back.
-	if err := layerBob.Put(ctx, "notes", "note2", []byte(`{"text":"Reply from Bob"}`)); err != nil {
+	if err := layerBob.Put(ctx, "notes", "", "note2", []byte(`{"text":"Reply from Bob"}`)); err != nil {
 		t.Fatalf("layerBob.Put: %v", err)
 	}
 

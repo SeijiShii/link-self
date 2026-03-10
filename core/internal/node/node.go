@@ -156,6 +156,13 @@ func (n *Node) SetOnGroupShare(fn func(peerDID string, payload []byte)) {
 	n.router.OnGroupShare = fn
 }
 
+// SetOnSubAnnounce sets a callback for subscription announcement messages.
+func (n *Node) SetOnSubAnnounce(fn func(peerDID string, payload []byte)) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.router.OnSubAnnounce = fn
+}
+
 // SendToPeerID sends a raw payload directly to a peer by their transport PeerID.
 // Used by DeviceSync where the recipient has a different PeerID from the shared DID.
 func (n *Node) SendToPeerID(ctx context.Context, pid peer.ID, payload []byte) error {

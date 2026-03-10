@@ -77,3 +77,16 @@ func (m *MemSharedStorage) ListByChannel(_ context.Context, channel string) ([]*
 	}
 	return result, nil
 }
+
+func (m *MemSharedStorage) ListByGroup(_ context.Context, groupID string) ([]*SharedRecord, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*SharedRecord
+	for _, r := range m.records {
+		if r.GroupID == groupID {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}

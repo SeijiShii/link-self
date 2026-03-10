@@ -36,6 +36,7 @@ package linkself
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Config holds configuration for creating a LinkSelf node.
@@ -290,19 +291,53 @@ type DeviceDB interface {
 // GroupShareAPI provides shared data channels for groups of different DIDs.
 type GroupShareAPI interface {
 	// RegisterChannel registers a named channel bound to a group.
-	RegisterChannel(name, groupID string) error
+	// Optional ChannelOption can configure retention, etc.
+	RegisterChannel(name, groupID string, opts ...ChannelOption) error
+
+	// Subscribe declares which topics this device wants for a channel.
+	// ["*"] means all topics, [] means unsubscribe.
+	Subscribe(channel string, topics []string) error
 
 	// Put stores a shared record in a channel. Broadcast to group members.
-	Put(ctx context.Context, channel, recordID string, body []byte) error
+	Put(ctx context.Context, channel, topic, recordID string, body []byte) error
 
 	// Get retrieves a shared record by channel and ID. Returns nil, nil if not found.
 	Get(ctx context.Context, channel, recordID string) (*SharedRecord, error)
 
 	// Delete marks a shared record as deleted. Broadcast to group members.
-	Delete(ctx context.Context, channel, recordID string) error
+	Delete(ctx context.Context, channel, topic, recordID string) error
 
-	// List returns all records in a channel.
+	// List returns all non-expired records in a channel.
 	List(ctx context.Context, channel string) ([]*SharedRecord, error)
+
+	// Dump returns all non-expired shared records for a group across all channels.
+	// The infra layer does not check permissions — the app layer is responsible.
+	Dump(ctx context.Context, groupID string) ([]*SharedRecord, error)
+
+	// Restore applies shared records using last-write-wins by timestamp.
+	// Returns the number of records actually applied.
+	// The infra layer does not check permissions — the app layer is responsible.
+	Restore(ctx context.Context, records []*SharedRecord) (int, error)
+
+	// Purge physically removes expired records from a channel.
+	// Returns the number of records removed.
+	Purge(ctx context.Context, channel string) (int, error)
+}
+
+// channelConfig holds optional channel settings.
+type channelConfig struct {
+	retention time.Duration
+}
+
+// ChannelOption configures optional channel settings.
+type ChannelOption func(*channelConfig)
+
+// WithRetention sets the data retention period for the channel.
+// Zero (default) means permanent storage (master data).
+func WithRetention(d time.Duration) ChannelOption {
+	return func(c *channelConfig) {
+		c.retention = d
+	}
 }
 
 // GroupAPI manages groups (membership, ownership).
@@ -333,6 +368,7 @@ type Record struct {
 type SharedRecord struct {
 	ID        string          `json:"id"`
 	Channel   string          `json:"channel"`
+	Topic     string          `json:"topic,omitempty"`
 	GroupID   string          `json:"groupID"`
 	DID       string          `json:"did"`
 	Body      json.RawMessage `json:"body"`

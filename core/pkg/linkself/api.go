@@ -56,15 +56,24 @@ type groupShareAPI struct {
 	layer *groupshare.GroupShareLayer
 }
 
-func (g *groupShareAPI) RegisterChannel(name, groupID string) error {
+func (g *groupShareAPI) RegisterChannel(name, groupID string, opts ...ChannelOption) error {
+	var cfg channelConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	return g.layer.RegisterChannel(&groupshare.Channel{
-		Name:    name,
-		GroupID: groupID,
+		Name:      name,
+		GroupID:   groupID,
+		Retention: cfg.retention,
 	})
 }
 
-func (g *groupShareAPI) Put(ctx context.Context, channel, recordID string, body []byte) error {
-	return g.layer.Put(ctx, channel, recordID, body)
+func (g *groupShareAPI) Subscribe(channel string, topics []string) error {
+	return g.layer.Subscribe(channel, topics)
+}
+
+func (g *groupShareAPI) Put(ctx context.Context, channel, topic, recordID string, body []byte) error {
+	return g.layer.Put(ctx, channel, topic, recordID, body)
 }
 
 func (g *groupShareAPI) Get(ctx context.Context, channel, recordID string) (*SharedRecord, error) {
@@ -75,6 +84,7 @@ func (g *groupShareAPI) Get(ctx context.Context, channel, recordID string) (*Sha
 	return &SharedRecord{
 		ID:        rec.ID,
 		Channel:   rec.Channel,
+		Topic:     rec.Topic,
 		GroupID:   rec.GroupID,
 		DID:       rec.DID,
 		Body:      rec.Body,
@@ -82,8 +92,8 @@ func (g *groupShareAPI) Get(ctx context.Context, channel, recordID string) (*Sha
 	}, nil
 }
 
-func (g *groupShareAPI) Delete(ctx context.Context, channel, recordID string) error {
-	return g.layer.Delete(ctx, channel, recordID)
+func (g *groupShareAPI) Delete(ctx context.Context, channel, topic, recordID string) error {
+	return g.layer.Delete(ctx, channel, topic, recordID)
 }
 
 func (g *groupShareAPI) List(ctx context.Context, channel string) ([]*SharedRecord, error) {
@@ -97,6 +107,7 @@ func (g *groupShareAPI) List(ctx context.Context, channel string) ([]*SharedReco
 			out = append(out, &SharedRecord{
 				ID:        r.ID,
 				Channel:   r.Channel,
+				Topic:     r.Topic,
 				GroupID:   r.GroupID,
 				DID:       r.DID,
 				Body:      r.Body,
@@ -105,6 +116,46 @@ func (g *groupShareAPI) List(ctx context.Context, channel string) ([]*SharedReco
 		}
 	}
 	return out, nil
+}
+
+func (g *groupShareAPI) Dump(ctx context.Context, groupID string) ([]*SharedRecord, error) {
+	recs, err := g.layer.Dump(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	var out []*SharedRecord
+	for _, r := range recs {
+		out = append(out, &SharedRecord{
+			ID:        r.ID,
+			Channel:   r.Channel,
+			Topic:     r.Topic,
+			GroupID:   r.GroupID,
+			DID:       r.DID,
+			Body:      r.Body,
+			Timestamp: r.Timestamp,
+		})
+	}
+	return out, nil
+}
+
+func (g *groupShareAPI) Purge(ctx context.Context, channel string) (int, error) {
+	return g.layer.Purge(ctx, channel)
+}
+
+func (g *groupShareAPI) Restore(ctx context.Context, records []*SharedRecord) (int, error) {
+	internal := make([]*groupshare.SharedRecord, len(records))
+	for i, r := range records {
+		internal[i] = &groupshare.SharedRecord{
+			ID:        r.ID,
+			Channel:   r.Channel,
+			Topic:     r.Topic,
+			GroupID:   r.GroupID,
+			DID:       r.DID,
+			Body:      r.Body,
+			Timestamp: r.Timestamp,
+		}
+	}
+	return g.layer.Restore(ctx, internal)
 }
 
 // groupAPI wraps group.Service + group.Store to implement GroupAPI.

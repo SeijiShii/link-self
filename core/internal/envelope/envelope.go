@@ -8,9 +8,10 @@ import "encoding/json"
 type Type string
 
 const (
-	TypeDeviceSync Type = "devicesync"
-	TypeGroupShare Type = "groupshare"
-	TypeMessage    Type = "message"
+	TypeDeviceSync  Type = "devicesync"
+	TypeGroupShare  Type = "groupshare"
+	TypeSubAnnounce Type = "sub_announce"
+	TypeMessage     Type = "message"
 )
 
 // envelope is the JSON wire format. Payload is []byte so Go's json package

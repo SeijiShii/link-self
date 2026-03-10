@@ -290,7 +290,7 @@ func TestGroupShare_RegisterAndPutGet(t *testing.T) {
 		t.Fatalf("RegisterChannel: %v", err)
 	}
 
-	if err := gs.Put(ctx, "notes", "note1", []byte(`{"text":"hello"}`)); err != nil {
+	if err := gs.Put(ctx, "notes", "", "note1", []byte(`{"text":"hello"}`)); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -417,8 +417,8 @@ func TestGroupShare_DeleteAndList(t *testing.T) {
 
 	gs := c.GroupShare()
 	_ = gs.RegisterChannel("notes", groupID)
-	_ = gs.Put(ctx, "notes", "n1", []byte(`a`))
-	_ = gs.Put(ctx, "notes", "n2", []byte(`b`))
+	_ = gs.Put(ctx, "notes", "", "n1", []byte(`a`))
+	_ = gs.Put(ctx, "notes", "", "n2", []byte(`b`))
 
 	recs, err := gs.List(ctx, "notes")
 	if err != nil {
@@ -428,7 +428,7 @@ func TestGroupShare_DeleteAndList(t *testing.T) {
 		t.Errorf("List returned %d, want 2", len(recs))
 	}
 
-	_ = gs.Delete(ctx, "notes", "n1")
+	_ = gs.Delete(ctx, "notes", "", "n1")
 	recs, _ = gs.List(ctx, "notes")
 	if len(recs) != 1 {
 		t.Errorf("List after Delete = %d, want 1", len(recs))
