@@ -51,6 +51,10 @@ type SharedStorage interface {
 	DeleteShared(ctx context.Context, channel, id string) error
 	ListByChannel(ctx context.Context, channel string) ([]*SharedRecord, error)
 	ListByGroup(ctx context.Context, groupID string) ([]*SharedRecord, error)
+	ListByChannelAndTopic(ctx context.Context, channel, topic string) ([]*SharedRecord, error)
+	// DeleteExpired removes records in the channel with Timestamp < before.
+	// Returns the number of records deleted.
+	DeleteExpired(ctx context.Context, channel string, before int64) (int, error)
 }
 
 // MemberResolver returns the member DIDs for a group, excluding self.

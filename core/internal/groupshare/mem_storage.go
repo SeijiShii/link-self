@@ -90,3 +90,30 @@ func (m *MemSharedStorage) ListByGroup(_ context.Context, groupID string) ([]*Sh
 	}
 	return result, nil
 }
+
+func (m *MemSharedStorage) ListByChannelAndTopic(_ context.Context, channel, topic string) ([]*SharedRecord, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*SharedRecord
+	for k, r := range m.records {
+		if k.channel == channel && r.Topic == topic {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
+
+func (m *MemSharedStorage) DeleteExpired(_ context.Context, channel string, before int64) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	deleted := 0
+	for k, r := range m.records {
+		if k.channel == channel && r.Timestamp < before {
+			delete(m.records, k)
+			deleted++
+		}
+	}
+	return deleted, nil
+}

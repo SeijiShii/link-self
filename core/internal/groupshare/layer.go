@@ -246,22 +246,8 @@ func (l *GroupShareLayer) Purge(ctx context.Context, channel string) (int, error
 		return 0, nil
 	}
 
-	recs, err := l.Storage.ListByChannel(ctx, channel)
-	if err != nil {
-		return 0, err
-	}
-
-	now := time.Now().UnixMilli()
-	purged := 0
-	for _, r := range recs {
-		if l.IsExpired(r, now) {
-			if err := l.Storage.DeleteShared(ctx, r.Channel, r.ID); err != nil {
-				return purged, err
-			}
-			purged++
-		}
-	}
-	return purged, nil
+	before := time.Now().UnixMilli() - ch.Retention.Milliseconds()
+	return l.Storage.DeleteExpired(ctx, channel, before)
 }
 
 // HandleIncoming processes a shared record received from a peer.

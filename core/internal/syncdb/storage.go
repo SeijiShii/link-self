@@ -11,6 +11,7 @@ type RecordStorage interface {
 	Get(ctx context.Context, id string) (*SyncRecord, error)
 	GetTimestamp(ctx context.Context, id string) (int64, error)
 	Delete(ctx context.Context, id string) error
+	List(ctx context.Context) ([]*SyncRecord, error)
 }
 
 var ErrNotFound = errors.New("record not found")

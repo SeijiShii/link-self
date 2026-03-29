@@ -57,6 +57,17 @@ func (m *MemStorage) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// List returns all stored records (copies).
+func (m *MemStorage) List(ctx context.Context) ([]*SyncRecord, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*SyncRecord, 0, len(m.byID))
+	for _, r := range m.byID {
+		result = append(result, copyRecord(r))
+	}
+	return result, nil
+}
+
 func copyRecord(r *SyncRecord) *SyncRecord {
 	if r == nil {
 		return nil
