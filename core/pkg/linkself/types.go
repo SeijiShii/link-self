@@ -82,6 +82,14 @@ type Config struct {
 	//
 	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	BootstrapPeers []string
+
+	// StorageBackend selects the storage implementation for all internal stores.
+	// Use MemoryBackend() for ephemeral in-memory storage (default when nil).
+	// Use SQLiteBackend(path) for persistent SQLite3 storage.
+	//
+	// StorageBackend は、すべての内部ストレージの実装を選択します。
+	// nil の場合は MemoryBackend() がデフォルトとして使用されます。
+	StorageBackend StorageBackend
 }
 
 // NodeInfo contains information about a started node.

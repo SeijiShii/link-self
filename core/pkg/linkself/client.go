@@ -21,11 +21,12 @@ import (
 // This is the only place where internal packages are accessed.
 // All other code should use the Client interface instead of this concrete type.
 type client struct {
-	node       *node.Node
-	identity   *did.Identity
-	deviceDB   *deviceDB
-	groupShare *groupShareAPI
-	groups     *groupAPI
+	node           *node.Node
+	identity       *did.Identity
+	deviceDB       *deviceDB
+	groupShare     *groupShareAPI
+	groups         *groupAPI
+	storageBackend StorageBackend
 }
 
 // NewClient creates a new LinkSelf client.
@@ -98,8 +99,23 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	c.node = n
 	c.identity = identity
 
+	// Resolve storage backend: nil defaults to MemoryBackend.
+	backend := config.StorageBackend
+	if backend == nil {
+		backend = MemoryBackend()
+	}
+	// If it's a SQLite backend, open the database now.
+	if sb, ok := backend.(*sqliteBackend); ok {
+		if err := sb.open(); err != nil {
+			n.Close()
+			return nil, fmt.Errorf("open sqlite backend: %w", err)
+		}
+	}
+	c.storageBackend = backend
+	stores := backend.storages()
+
 	// Wire DeviceSync layer (no peers initially — single device).
-	dsStorage := devicesync.NewMemStorage()
+	dsStorage := stores.deviceStorage
 	dsEngine := &devicesync.ReplicationEngine{
 		Storage: dsStorage,
 		SelfDID: identity.DID,
@@ -118,7 +134,7 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	c.deviceDB = &deviceDB{engine: dsEngine}
 
 	// Wire Group layer.
-	groupStore := group.NewMemStore()
+	groupStore := stores.groupStore
 	groupService := group.NewService(groupStore)
 	c.groups = &groupAPI{
 		service: groupService,
@@ -127,7 +143,7 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	}
 
 	// Wire GroupShare layer.
-	gsStorage := groupshare.NewMemSharedStorage()
+	gsStorage := stores.sharedStorage
 	gsResolver := &memberResolverAdapter{store: groupStore, selfDID: identity.DID}
 	gsLayer := groupshare.NewGroupShareLayer(
 		gsStorage,
@@ -143,7 +159,7 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	)
 	// Wire subscription stores: LocalSubs persisted via DeviceSync (auto-replicated to same-DID devices).
 	gsLayer.LocalSubs = groupshare.NewDeviceSyncSubscriptionStore(dsEngine)
-	gsLayer.RemoteSubs = groupshare.NewMemSubscriptionStore()
+	gsLayer.RemoteSubs = stores.subscriptionStore
 	gsLayer.SendSubAnnounce = func(ctx context.Context, memberDIDs []string, payload []byte) error {
 		wrapped, err := envelope.Wrap(envelope.TypeSubAnnounce, payload)
 		if err != nil {
@@ -176,13 +192,21 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 // Stop stops the node and releases resources.
 // See Client.Stop for detailed documentation.
 func (c *client) Stop(ctx context.Context) error {
+	var firstErr error
 	if c.node != nil {
-		err := c.node.Close()
+		if err := c.node.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 		c.node = nil
 		c.identity = nil
-		return err
 	}
-	return nil
+	if c.storageBackend != nil {
+		if err := c.storageBackend.close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		c.storageBackend = nil
+	}
+	return firstErr
 }
 
 // GetMyDID returns the node's DID.
