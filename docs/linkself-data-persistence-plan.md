@@ -110,9 +110,11 @@ flowchart TB
 
 > **注意（2026-03）:** 旧 sync-db（単一 SyncLayer）は **DeviceSync / GroupShare 二層アーキテクチャ** に移行した。詳細は [sync-db-plan.md](sync-db-plan.md) を参照。
 
+**DeviceDB / GroupShare は「同期トランスポート層」** であり、アプリの汎用 DB ではない。body の中身は LinkSelf にとって不透明な BLOB であり、body 内フィールドでの検索や JOIN は提供しない。アプリがリッチなクエリを必要とする場合は、同期データをアプリ側の独自 DB に反映し、そちらでクエリを実行する構成が推奨される。
+
 - **DeviceSync（同一 DID 間）**: DID 空間内の全データ（contacts、messages、アプリデータ等）を同一 DID の全デバイス間で**透過的に全同期**する。アプリは同期を意識しない。`DeviceDB.Put("contacts", id, body)` のようにローカル DB として使うと、自動的に他デバイスに複製される。
 - **GroupShare（異なる DID 間）**: アプリが **Channel**（名前・スキーマ・権限）を定義し、**アプリが選んだ共有データのみ**をグループメンバーに送る。サーバーサイド API のように振る舞う。`AccessPolicy` / `SchemaValidator` はアプリが実装する。
-- **ストレージ**: 各 DID 空間内に DeviceStorage（全データ + ChangeLog）と SharedStorage（共有レコード）を配置。インターフェース化されており、SQLite 参照実装またはアプリ独自の実装を注入できる。
+- **ストレージ**: 各 DID 空間内に DeviceStorage（全データ + ChangeLog）と SharedStorage（共有レコード）を配置。ストレージバックエンドは `Config.StorageBackend` で選択する（`SQLiteBackend(path)` または `MemoryBackend()`）。個別インターフェースの外部注入は行わない（同期トランスポートの内部詳細であるため）。
 - **アプリID**: アプリごとのデータは DID 空間内 `apps/<app-id>/` に分離。GroupShare の Channel 登録時にもアプリID で名前空間を分けることが可能。
 
 ---

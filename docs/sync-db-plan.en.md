@@ -8,6 +8,23 @@
 
 ## 1. Background and Direction Change
 
+### 1.1 Role as a Sync Transport Layer
+
+**DeviceDB / GroupShare is a "sync transport layer", not an application's general-purpose DB.** LinkSelf's storage (`device_records`, `shared_records`, `change_log`) exists to provide data synchronization between devices and users.
+
+- **Provides:** Logical namespaces (`table`, `channel`), record-level CRUD, automatic last-write-wins conflict resolution, ChangeLog-based incremental sync
+- **Does not provide:** Queries by fields within `body`, cross-table JOINs, app-specific schema constraints or indexes
+
+When an app needs rich queries (WHERE clauses, JOINs, full-text search, etc.), the recommended architecture is to mirror LinkSelf's sync data into the app's own DB and run queries there. LinkSelf handles the sync responsibility; the app handles the query responsibility.
+
+```
+App layer:      App's own DB ← rich queries (WHERE, JOIN, INDEX)
+                   ↑ mirror received data
+LinkSelf layer: DeviceDB / GroupShare ← sync transport (table + id + body)
+```
+
+### 1.2 From Old Design
+
 The old design (single SyncLayer) broadcast records uniformly to all group members. However, data sharing between "your own devices" and "other users in a group" are fundamentally different semantics.
 
 - **Between own devices (same DID):** Should sync all data transparently, like a local DB
@@ -219,4 +236,4 @@ Old `core/internal/syncdb` to be removed in Phase E.
 - **Timestamp:** Wall-clock milliseconds for last-write-wins. Extensible to logical time (Lamport) if NTP skew becomes an issue
 - **Permissions:** GroupShare AccessPolicy / SchemaValidator are implemented by the app layer. LinkSelf provides only abstract interfaces
 - **Groups:** group package unchanged. Only GroupShare uses it. DeviceSync does not use the group concept
-- **Storage:** All interface-based. Apps can use the SQLite reference implementation or inject their own
+- **Storage:** All interface-based. The storage backend is selected via `Config.StorageBackend` (`SQLiteBackend(path)` or `MemoryBackend()`). Individual interface injection from outside is not supported (these are internal details of the sync transport). Apps that need rich queries should use their own DB alongside LinkSelf
