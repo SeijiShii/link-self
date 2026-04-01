@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/SeijiShii/link-self/core/internal/dataroot"
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
+	"github.com/SeijiShii/link-self/core/internal/pairing"
 	"github.com/SeijiShii/link-self/core/internal/did"
 	"github.com/SeijiShii/link-self/core/internal/envelope"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
@@ -29,6 +31,7 @@ type client struct {
 	myDB           *myDB
 	network        *networkAPI
 	storageBackend StorageBackend
+	pairingSession *pairing.PairingSession
 }
 
 // NewClient creates a new LinkSelf client.
@@ -349,6 +352,33 @@ func (c *client) SetOnMessage(handler MessageHandler) {
 	if c.node != nil {
 		c.node.SetOnMessage(handler)
 	}
+}
+
+// CreatePairingToken generates a time-limited token for pairing a new device.
+func (c *client) CreatePairingToken(ctx context.Context, ttl time.Duration) (string, error) {
+	if c.identity == nil {
+		return "", fmt.Errorf("node not started")
+	}
+	userID := &did.UserIdentity{Identity: *c.identity}
+	session, err := pairing.NewPairingSession(userID, ttl)
+	if err != nil {
+		return "", err
+	}
+	c.pairingSession = session
+	return session.Token.Secret, nil
+}
+
+// CompletePairing validates the secret and returns the exported user private key.
+func (c *client) CompletePairing(ctx context.Context, secret string) ([]byte, error) {
+	if c.pairingSession == nil {
+		return nil, fmt.Errorf("no active pairing session")
+	}
+	key, err := c.pairingSession.Complete(secret)
+	if err != nil {
+		return nil, err
+	}
+	c.pairingSession = nil // single-use
+	return key, nil
 }
 
 // MyDB returns the unified data API (KV + SQL). Returns nil before Start.

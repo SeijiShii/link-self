@@ -335,6 +335,15 @@ type Client interface {
 	// Network returns the NetworkAPI for network management.
 	// Returns nil if the node is not started.
 	Network() NetworkAPI
+
+	// CreatePairingToken generates a time-limited token for pairing a new device.
+	// The token secret should be transferred to the new device (e.g. via QR code).
+	// Returns the token secret and an opaque session handle.
+	CreatePairingToken(ctx context.Context, ttl time.Duration) (secret string, err error)
+
+	// CompletePairing validates the secret and returns the exported user private key.
+	// The new device calls did.ImportUserIdentity(key) to reconstruct the identity.
+	CompletePairing(ctx context.Context, secret string) (userPrivKey []byte, err error)
 }
 
 // MyDB is the unified public API for data access.

@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/SeijiShii/link-self/core/internal/did"
+	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
 // TestMyDB_NilBeforeStart: MyDB() returns nil before Start.
@@ -442,6 +445,115 @@ func TestMyDB_SetSyncScope_WithIncludeExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetSyncScope with IncludeExisting: %v", err)
 	}
+}
+
+// TestClient_CreatePairingToken: Generates a token secret.
+func TestClient_CreatePairingToken(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	secret, err := c.CreatePairingToken(ctx, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("CreatePairingToken: %v", err)
+	}
+	if secret == "" {
+		t.Fatal("secret should not be empty")
+	}
+}
+
+// TestClient_CompletePairing: Full pairing flow on single client.
+func TestClient_CompletePairing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	originalDID := c.GetMyDID()
+
+	secret, err := c.CreatePairingToken(ctx, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyData, err := c.CompletePairing(ctx, secret)
+	if err != nil {
+		t.Fatalf("CompletePairing: %v", err)
+	}
+	if len(keyData) == 0 {
+		t.Fatal("keyData should not be empty")
+	}
+
+	// Verify the key produces the same DID
+	imported, err := importIdentityFromKey(keyData)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if imported != originalDID {
+		t.Errorf("DID mismatch: got %q, want %q", imported, originalDID)
+	}
+}
+
+// TestClient_CompletePairing_WrongSecret: Wrong secret fails.
+func TestClient_CompletePairing_WrongSecret(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	_, _ = c.CreatePairingToken(ctx, 5*time.Minute)
+
+	_, err = c.CompletePairing(ctx, "wrong-secret")
+	if err == nil {
+		t.Fatal("should fail with wrong secret")
+	}
+}
+
+// importIdentityFromKey is a test helper to reconstruct DID from exported key.
+func importIdentityFromKey(data []byte) (string, error) {
+	priv, err := crypto.UnmarshalPrivateKey(data)
+	if err != nil {
+		return "", err
+	}
+	pub := priv.GetPublic()
+	raw, err := pub.Raw()
+	if err != nil {
+		return "", err
+	}
+	_ = raw
+	id, err := did.FromPrivKey(priv)
+	if err != nil {
+		return "", err
+	}
+	return id.DID, nil
 }
 
 // TestMyDB_SQLWrite_SyncsViaDeviceSync: SQL INSERT triggers DeviceSync replication.
