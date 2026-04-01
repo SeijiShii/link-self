@@ -1,7 +1,7 @@
 # グループ・同期 DB 実装ドキュメント
 
 **日本語**（このページ）| [English](group-syncdb-implementation.en.md)
-**参照:** [グループの概念](group-concept.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)
+**参照:** [グループの概念](network-concept.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)
 
 本ドキュメントは、上記計画書と整合する形で**実装の配置・API・テスト**をまとめたものです。
 
@@ -15,7 +15,7 @@
 
 ### 1.1 計画との対応
 
-| 計画（group-concept.md） | 実装 |
+| 計画（network-concept.md） | 実装 |
 |--------------------------|------|
 | グループ = メンバー DID の集合、最低 2 人 | `Group.Members`、`Service.CreateGroup` で 2 人未満は `ErrTooFewMembers` |
 | 1 対 1 = 2 人グループ | 専用型なし。2 人で作成すればよい |
@@ -146,7 +146,7 @@
 
 ## 5. 計画書との整合チェック
 
-- **group-concept.md**: §1〜§7 の要件（2 人以上、脱退・解体、オーナー権限・他オーナー降格不可、最後のオーナー時の自動昇格、権限はアプリ層）は実装とテストでカバー。
+- **network-concept.md**: §1〜§7 の要件（2 人以上、脱退・解体、オーナー権限・他オーナー降格不可、最後のオーナー時の自動昇格、権限はアプリ層）は実装とテストでカバー。
 - **sync-db-plan.md**: メタ付与・即時配信・後勝ち適用、ストレージインターフェース、groupId に紐づくメンバー DID（group.Store 経由）、SendToGroup／SetOnMessage の利用は実装済み。SQLite 参照実装・スキーマ規約は未実装（計画どおりアプリ側または別タスク）。
 
 以上で、計画書の内容と実装・テストの整合性をドキュメント化している。

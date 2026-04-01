@@ -2,7 +2,7 @@
 
 **日本語**（このページ）| [English](sync-db-plan.en.md)
 **ステータス:** DeviceSync / GroupShare コア実装済み（インメモリストレージ・テスト完了。SQLite 参照実装は未着手）
-**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](group-concept.md)、[永続化方針](linkself-data-persistence-plan.md)
+**参照:** [Phase 1 設計](phase1-design.md)、[グループの概念](network-concept.md)、[永続化方針](linkself-data-persistence-plan.md)
 
 ---
 
@@ -271,47 +271,49 @@ type GroupShareLayer struct {
 
 ---
 
-## 7. 今後の実装予定
+## 7. 実装状況
 
-1. **公開 API 統合** (`pkg/linkself`): `MyDB()` を唯一の公開 API に統合（SQL 対応）。`DB()` / `SharedDB()` は廃止
-2. **Node プロトコル分離**: `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0` を追加
-3. **daemon JSON-RPC 拡張**: `mydb.*`, `network.*` メソッド（内部では devicesync / groupshare を呼び出す）
-4. **SQLite 参照実装**: DeviceStorage / SharedStorage の SQLite 実装
-5. **差分同期ハンドシェイク**: DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
-6. **ChangeLog 保持ポリシー**: 時間/件数ベースでの切り捨て + 全同期フォールバック
-7. **ペアリングプロトコル**: ユーザー鍵 / デバイス鍵の2層構造 + QR ペアリング
+| 項目 | 状態 |
+|------|------|
+| 公開 API 統合（MyDB 唯一、SQL 対応） | 実装済み |
+| daemon JSON-RPC（`mydb.*`, `network.*`） | 実装済み |
+| SQLite 参照実装（DeviceStorage / SharedStorage） | 実装済み |
+| 差分同期ハンドシェイク（SyncWith + 全同期フォールバック） | 実装済み |
+| ChangeLog 保持ポリシー（時間/件数ベース） | 実装済み |
+| ユーザー鍵/デバイス鍵 + ペアリングプロトコル | 実装済み |
+| Node プロトコル分離 | 未実装（将来） |
 
 ---
 
 ## 8. 注意点
 
 - **タイムスタンプ**: 実時刻（ミリ秒）で後勝ち。NTP ずれが問題になる場合は論理時刻（Lamport 等）への拡張を検討
-- **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
-- **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
+- **権限**: テーブル単位の read/write/delete 権限をロール DAG で制御。行レベルはアプリが WHERE 句で制御
+- **ネットワーク**: network パッケージがロール DAG ベースのメンバー管理を提供。旧 group パッケージは後方互換として残存
 - **ストレージ**: 全てインターフェース化。ストレージのパスは LinkSelf が DID 空間・SuiteID・ネットワークインスタンスに基づいて自動決定する。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない。アプリはストレージの配置にも実装にも関与しない
-- **公開 API**: `client.MyDB()` が唯一の公開 API。SQL クエリインターフェース（`Exec()` / `Query()`）を提供する。現行の Put/Get は内部実装として残る。詳細は [データ同期コンセプト §15](data-sync-concept.md) を参照
+- **公開 API**: `client.MyDB()` が唯一の公開 API。SQL（`Exec` / `Query` / `Migrate`）と KV（`Put` / `Get`）の両方を提供。テーブル単位の同期スコープ（`SetSyncScope`）で DeviceSync / GroupShare を自動切り替え
 - **ChangeLog 保持**: 時間ベース（デフォルト30日）/ 件数ベース（デフォルト10000件）で設定可能。不足時は自動全同期にフォールバック（権限確認付き）
 
 ---
 
-## 9. 用語の進化（2026-04）
+## 9. 用語と API の対応
 
 > **参照:** [データ同期コンセプト](data-sync-concept.md)
 
-公開 API の名称を以下のように進化させる。内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
+内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
 
-| 現行（コード上） | 新名称 | 理由 |
-|-----------------|--------|------|
-| DeviceDB + DB | **MyDB** | 唯一の公開 API。SQL 対応。同期スコープはテーブル単位で設定 |
-| GroupShare / GroupShareAPI / SharedDB | 公開 API から廃止 | 内部メカニズムに格下げ。アプリからは見えない |
-| GroupAPI / group パッケージ | **NetworkAPI** | グループ → ネットワーク管理に改名。オーナー概念はロール DAG に吸収（§9.1 参照） |
+| 公開 API | 内部パッケージ | 説明 |
+|---------|--------------|------|
+| **MyDB** | devicesync + sqlproxy | 唯一の公開 API。SQL + KV。同期スコープはテーブル単位 |
+| **NetworkAPI** | network | ネットワーク管理。ロール DAG ベースの権限制御 |
+| *(内部)* GroupShare | groupshare | ネットワークメンバー間同期。公開 API からは非公開 |
 
-また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入。**ユーザー DID** と **デバイス DID** の2層構造（§1.4）も導入。詳細は [データ同期コンセプト](data-sync-concept.md) を参照。
+### 主要概念
 
-### 9.1 オーナー概念のロール DAG への吸収
-
-[グループの概念](group-concept.md) で定義されていたオーナー（Owners フィールド）は、[データ同期コンセプト](data-sync-concept.md) のロール DAG に吸収する。
-
-- group パッケージの `Owners []string` フィールドは廃止予定
-- キック・招待等の管理操作の権限は、スイートのロール定義で決める（例: admin ロールのみ）
-- 最後の管理者が脱退した場合の自動昇格も、ロールベースで再設計する
+| 概念 | 説明 |
+|------|------|
+| **Suite** | アプリ群の識別（SuiteID、ビルド時にハードコード） |
+| **Network** | メンバー集合とデータ空間（実行時に作成） |
+| **ユーザー DID** | ネットワークに公開される安定した DID。デバイスが変わっても不変 |
+| **デバイス DID** | 各デバイス固有の DID。ペアリングにのみ使用 |
+| **ロール DAG** | アプリが定義するロール階層。オーナー概念を吸収 |

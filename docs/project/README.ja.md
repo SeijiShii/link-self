@@ -23,7 +23,7 @@
 - [Support / Donate（寄付）](#donate)
 - [Roadmap（ロードマップ）](#roadmap)
 - Phase 1 設計・実装方針: [日本語](phase1-design.md) | [English](phase1-design.en.md)（実装済みコアの設計ドキュメント）
-- グループの概念: [日本語](group-concept.md) | [English](group-concept.en.md)（グループ・オーナー・脱退・権限の扱い）
+- グループの概念: [日本語](network-concept.md) | [English](network-concept.en.md)（グループ・オーナー・脱退・権限の扱い）
 - 分散ネットワーク DB 化計画: [日本語](sync-db-plan.md) | [English](sync-db-plan.en.md)（アプリからネットワークを DB として扱う設計）
 - グループ・同期 DB 実装: [日本語](group-syncdb-implementation.md) | [English](group-syncdb-implementation.en.md)（実装・テストのドキュメント）
 - サンプルアプリ計画（チャット＋ファイル共有）: [日本語](sample-chat-app-plan.md) | [English](sample-chat-app-plan.en.md)（LinkSelf をインフラとして使う本格サンプルアプリの設計）

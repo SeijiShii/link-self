@@ -18,7 +18,7 @@ Based on the “Tanaka and friends” scenario and Technical Approach, Phase 1 i
 | **Discovery** | Look up peer DID in DHT and get address (PeerID / Multiaddr). |
 | **Connect, identity** | Connect to that address and authenticate with secret-key challenge–response. Reject impersonation. |
 | **Messages** | Store-and-Forward. Send by group (to each member DID except self). If peer is offline, hold locally and send when online. |
-| **Group** | Set of member DIDs (2+). 1-to-1 is a 2-person group. Member list is stored locally on each node. See [Group concept](group-concept.en.md). |
+| **Group** | Set of member DIDs (2+). 1-to-1 is a 2-person group. Member list is stored locally on each node. See [Group concept](network-concept.en.md). |
 
 Note: Send/connect APIs are planned to be group-based (SendToGroup / ConnectToGroup). Current implementation is 1-to-1 (SendMessage / Connect).
 
@@ -115,6 +115,6 @@ Phase 2 (infrastructure module, sample apps) will extend the Phase 1 `core` modu
 
 ## 9. Related documents
 
-- [Group concept](group-concept.en.md): Group, owner, leave, permissions.
+- [Group concept](network-concept.en.md): Group, owner, leave, permissions.
 - [Sync DB plan](sync-db-plan.en.md): Treating the network as a DB from the app.
 - [Sample chat app plan](../app/sample-chat-app-plan.en.md): Sample app design using group APIs.

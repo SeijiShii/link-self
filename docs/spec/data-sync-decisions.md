@@ -134,14 +134,14 @@ client.MyDB().Migrate(ctx, []Migration{
 | M5 | RegisterChannel | `opts ...ChannelOption` 付きが正 | topic-subscription-filtering.md |
 | G1 | Retention と再同期 | 差分同期ハンドシェイクで Retention 情報を伝達、送信側で期限切れレコードをスキップ | dump-restore-retention.md |
 | G2 | SubAnnouncement 再接続 | 接続確立時（認証完了後）に SubAnnouncement を自動交換するハンドシェイクを追加 | topic-subscription-filtering.md |
-| G3 | オーナー → ロール DAG | group パッケージのオーナー概念（Owners フィールド）はロール DAG に吸収。キック・招待等の管理操作の権限はスイートのロール定義で決める | group-concept.md, sync-db-plan.md |
+| G3 | オーナー → ロール DAG | group パッケージのオーナー概念（Owners フィールド）はロール DAG に吸収。キック・招待等の管理操作の権限はスイートのロール定義で決める | network-concept.md, sync-db-plan.md |
 | G4 | MyDB バックアップ | MyDB にも Dump/Restore を追加。全デバイス喪失時の個人データ復元手段 | dump-restore-retention.md |
 | S1 | Channel/Topic → SQL | Channel=テーブル、Topic=カラム値にマッピング。サブスクリプションは `Subscribe(table, filter条件)` に移行 | topic-subscription-filtering.md |
 | S2 | ロール変更の競合 | 行単位 LWW（タイムスタンプ後勝ち）で統一。特別な競合解決は不要 | — |
 | S3 | 保留キュー | 上限あり。超過分は古いものから破棄し、差分同期で再取得 | dump-restore-retention.md |
 | G6 | MyDB の Retention | MyDB に Retention 概念はない。全レコードがダンプ対象 | dump-restore-retention.md |
 | G7 | MyDB Dump のテーブル列挙 | DeviceStorage に `ListTables()` メソッドを追加 | sync-db-plan.md, dump-restore-retention.md |
-| G8 | ネットワーク最低メンバー数 | 最低 1 人（個人用データ空間として許容）。group-concept の「最低 2 人」はネットワーク移行後は適用しない | group-concept.md |
+| G8 | ネットワーク最低メンバー数 | 最低 1 人（個人用データ空間として許容）。group-concept の「最低 2 人」はネットワーク移行後は適用しない | network-concept.md |
 
 ---
 

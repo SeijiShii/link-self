@@ -3,7 +3,7 @@
 **日本語**（このページ）| [English](sample-chat-app-plan.en.md)  
 **ステータス:** 実装保留（計画のみ docs に保存）  
 **概要:** **LinkSelf をインフラとして使用**する 1 本の本格サンプルアプリの設計。グループ/1対1 チャットと P2P ファイル共有を備える。グループ情報・連絡先・同期メタ等は **LinkSelf 側の DB** に保存され、アプリは LinkSelf の API 経由で参照・操作する。
-**参照:** [グループの概念](group-concept.md)、[Phase 1 設計](phase1-design.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[ロードマップ](README.ja.md#roadmap)
+**参照:** [グループの概念](network-concept.md)、[Phase 1 設計](phase1-design.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[ロードマップ](README.ja.md#roadmap)
 
 > **注意（2026-03）:** データ同期は **DeviceSync / GroupShare 二層アーキテクチャ** に移行。旧 SyncLayer は DeviceSync + GroupShare に置き換わる。公開 API 名称は MyDB / SharedDB に進化予定。
 
@@ -18,7 +18,7 @@
 
 ## 結論
 
-- **本格サンプルアプリ（チャット＋ファイル共有）**: 実装可能。1 本のアプリがコアの Node API（`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`）および LinkSelf が提供する DeviceSync + GroupShare を利用する。1 対 1 は **2 人ネットワーク** のケースとして扱う（[グループの概念](group-concept.md) 参照）。
+- **本格サンプルアプリ（チャット＋ファイル共有）**: 実装可能。1 本のアプリがコアの Node API（`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`）および LinkSelf が提供する DeviceSync + GroupShare を利用する。1 対 1 は **2 人ネットワーク** のケースとして扱う（[グループの概念](network-concept.md) 参照）。
 - **1台のPCで複数ノード**: 可能。**1プロセス＝1ノード** とし、同じPCで同じバイナリを複数起動（複数ターミナル）すれば、複数ノードを再現できる。統合テスト [core/test/integration/integration_test.go](../core/test/integration/integration_test.go) がすでに同一ホスト上で複数ノード（別ポート）を立てて DHT・認証・メッセージを検証している。
 
 ---
@@ -161,6 +161,6 @@ flowchart LR
 
 ## 関連ドキュメント
 
-- [グループの概念](group-concept.md): グループ・オーナー・脱退・権限の扱い。
+- [グループの概念](network-concept.md): グループ・オーナー・脱退・権限の扱い。
 - [Phase 1 設計](phase1-design.md): コアのスコープと API 方針。
 - [分散ネットワーク DB 化計画](sync-db-plan.md): アプリからネットワークを DB として扱う設計。

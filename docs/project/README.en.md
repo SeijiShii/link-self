@@ -16,7 +16,7 @@
 - [Roadmap](#roadmap)
 - [Getting Started](#getting-started)
 
-**Related docs:** [Phase 1 design](phase1-design.en.md), [Group concept](group-concept.en.md), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md), [Gitcoin funding procedure](gitcoin-funding.en.md).
+**Related docs:** [Phase 1 design](phase1-design.en.md), [Group concept](network-concept.en.md), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md), [Gitcoin funding procedure](gitcoin-funding.en.md).
 
 ---
 
@@ -84,7 +84,7 @@ We plan to register the project on **Gitcoin Grants** to accept donations. Your 
 
 ## Roadmap
 
-- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design](phase1-design.en.md) ([日本語](phase1-design.md)) and [core/README.md](../core/README.md). Related: [Group concept](group-concept.en.md) ([日本語](group-concept.md)), [Sync DB plan](sync-db-plan.en.md) ([日本語](sync-db-plan.md)), [Group and Sync DB implementation](group-syncdb-implementation.en.md) ([日本語](group-syncdb-implementation.md)), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md) ([日本語](sample-chat-app-plan.md)).
+- [x] **Phase 1: Core logic** — Define and implement core logic; run multiple nodes locally and cover various test cases. **Done.** See [Phase 1 design](phase1-design.en.md) ([日本語](phase1-design.md)) and [core/README.md](../core/README.md). Related: [Group concept](network-concept.en.md) ([日本語](network-concept.md)), [Sync DB plan](sync-db-plan.en.md) ([日本語](sync-db-plan.md)), [Group and Sync DB implementation](group-syncdb-implementation.en.md) ([日本語](group-syncdb-implementation.md)), [Sample app plan (chat + file sharing)](sample-chat-app-plan.en.md) ([日本語](sample-chat-app-plan.md)).
 - [ ] **Phase 2: Infrastructure** — Infrastructure module; one full-featured sample app (chat + P2P file sharing) that **uses LinkSelf as infrastructure**; group info etc. stored in LinkSelf's DB; **path for using LinkSelf as a library** (public API, packaging, docs).
 - [ ] **Phase 3: Platforms** — PC (desktop), Android, iOS.
 

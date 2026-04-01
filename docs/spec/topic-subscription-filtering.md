@@ -1,7 +1,7 @@
 # トピックベース・サブスクリプションフィルタリング
 
 **日本語**（このページ）| [English](topic-subscription-filtering.en.md)
-**参照:** [データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[グループの概念](group-concept.md)
+**参照:** [データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[グループの概念](network-concept.md)
 
 ---
 
@@ -160,24 +160,21 @@ GroupShare データメッセージ（`TypeGroupShare`）とは別のエンベ�
 
 ---
 
-## 6. 公開 API（pkg/linkself）
+## 6. API
 
-### 6.1 GroupShareAPI インターフェース
+GroupShare は内部メカニズムであり、公開 API からは非公開。アプリは `client.MyDB()` の SQL インターフェースを通じてデータにアクセスする。
+
+以下は内部実装（`internal/groupshare`）の参照用インターフェース:
 
 ```go
-type GroupShareAPI interface {
-    RegisterChannel(name, groupID string, opts ...ChannelOption) error
-    Subscribe(channel string, topics []string) error
-    Put(ctx context.Context, channel, topic, recordID string, body []byte) error
-    Get(ctx context.Context, channel, recordID string) (*SharedRecord, error)
-    Delete(ctx context.Context, channel, topic, recordID string) error
-    List(ctx context.Context, channel string) ([]*SharedRecord, error)
-}
+// internal/groupshare — アプリからは直接アクセスしない
+type GroupShareLayer struct { ... }
+func (l *GroupShareLayer) RegisterChannel(ch *Channel) error
+func (l *GroupShareLayer) Subscribe(channel string, topics []string) error
+func (l *GroupShareLayer) Put(ctx, channel, topic, recordID string, body []byte) error
 ```
 
-- `Put` / `Delete` に `topic` パラメータを追加
-- `Subscribe` メソッドを新規追加
-- 完全な GroupShareAPI（Dump/Restore/Purge 含む）は [dump-restore-retention.md §4.1](dump-restore-retention.md) を参照
+トピックフィルタリングはネットワークスコープのテーブルに対する内部同期最適化として機能する。
 
 ### 6.2 デーモン RPC
 

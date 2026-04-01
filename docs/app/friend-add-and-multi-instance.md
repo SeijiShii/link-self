@@ -101,5 +101,5 @@ UI では「DID 入力」を 1 つにし、QR スキャン結果も手打ちも�
 
 - [実装計画](implementation-plan.md)
 - [サンプルアプリ計画（リポジトリ root）](../../docs/sample-chat-app-plan.md)
-- [グループの概念](../../docs/group-concept.md)
+- [グループの概念](../../docs/network-concept.md)
 - [TODO.md（リポジトリ root）](../../TODO.md)

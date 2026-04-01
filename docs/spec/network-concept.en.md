@@ -1,6 +1,6 @@
 # Group concept
 
-**English** (this page) | [日本語](group-concept.md)  
+**English** (this page) | [日本語](network-concept.md)  
 **See also:** [Phase 1 design](phase1-design.en.md), [Sync DB plan](sync-db-plan.en.md)
 
 ---

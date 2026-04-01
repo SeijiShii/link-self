@@ -2,7 +2,7 @@
 
 **English** (this page) | [日本語](sync-db-plan.md)
 **Status:** DeviceSync / GroupShare core implemented (in-memory storage and tests complete; SQLite reference implementation not yet done)
-**See also:** [Phase 1 design](phase1-design.en.md), [Group concept](group-concept.en.md), [Persistence plan](linkself-data-persistence-plan.md)
+**See also:** [Phase 1 design](phase1-design.en.md), [Group concept](network-concept.en.md), [Persistence plan](linkself-data-persistence-plan.md)
 
 ---
 

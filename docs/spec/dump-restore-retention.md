@@ -237,47 +237,53 @@ type SharedStorage interface {
 ### 7.1 チャットアプリ
 
 ```go
-// マスタデータ: ユーザープロフィール（永久保存）
-client.GroupShare().RegisterChannel("profiles", groupID)
+db := client.MyDB()
 
-// トランザクショナル: チャットメッセージ（30日保存）
-client.GroupShare().RegisterChannel("messages", groupID,
-    linkself.WithRetention(30 * 24 * time.Hour))
+// テーブル作成
+db.Migrate(ctx, []linkself.Migration{
+    {Version: 1, SQL: `CREATE TABLE profiles (id TEXT PRIMARY KEY, name TEXT, avatar TEXT)`},
+    {Version: 2, SQL: `CREATE TABLE messages (id TEXT PRIMARY KEY, sender TEXT, body TEXT, ts INTEGER)`},
+})
 
-// 定期的なクリーンアップ（アプリ起動時など）
-purged, _ := client.GroupShare().Purge(ctx, "messages")
-fmt.Printf("%d expired messages cleaned up\n", purged)
+// テーブルの同期スコープをネットワークに設定
+db.SetSyncScope(ctx, "profiles", linkself.ScopeNetwork)
+db.SetSyncScope(ctx, "messages", linkself.ScopeNetwork)
+
+// データ書き込み（自動同期される）
+db.Exec(ctx, `INSERT INTO profiles (id, name) VALUES (?, ?)`, myDID, "Alice")
+db.Exec(ctx, `INSERT INTO messages (id, sender, body, ts) VALUES (?, ?, ?, ?)`,
+    msgID, myDID, "Hello!", time.Now().UnixMilli())
 ```
 
 ### 7.2 バックアップ・移行
 
 ```go
-// ダンプ（管理者がアプリ層で権限チェック済みの前提）
-records, _ := client.GroupShare().Dump(ctx, groupID)
+// ダンプ（MyDB の全レコード）
+records, _ := client.MyDB().Dump(ctx)
 jsonData, _ := json.Marshal(records)
 os.WriteFile("backup.json", jsonData, 0644)
 
 // リストア（別ノードまたは復元時）
-var records []*linkself.SharedRecord
+var records []*linkself.Record
 json.Unmarshal(jsonData, &records)
-applied, _ := client.GroupShare().Restore(ctx, records)
+applied, _ := client.MyDB().Restore(ctx, records)
 fmt.Printf("%d records restored\n", applied)
 ```
 
 ### 7.3 デーモン RPC
 
 ```json
-// チャネル登録（30日保存）
-{"jsonrpc":"2.0","method":"groupshare.register","params":{"channel":"messages","groupID":"g1","retention":"720h"},"id":1}
+// SQL 実行
+{"jsonrpc":"2.0","method":"mydb.exec","params":{"sql":"INSERT INTO messages (id, body) VALUES (?, ?)", "args":["m1","hello"]},"id":1}
+
+// SQL クエリ
+{"jsonrpc":"2.0","method":"mydb.query","params":{"sql":"SELECT * FROM messages WHERE sender = ?", "args":["did:key:..."]},"id":2}
 
 // ダンプ
-{"jsonrpc":"2.0","method":"groupshare.dump","params":{"groupID":"g1"},"id":2}
+{"jsonrpc":"2.0","method":"mydb.dump","params":{},"id":3}
 
 // リストア
-{"jsonrpc":"2.0","method":"groupshare.restore","params":{"records":[...]},"id":3}
-
-// クリーンアップ
-{"jsonrpc":"2.0","method":"groupshare.purge","params":{"channel":"messages"},"id":4}
+{"jsonrpc":"2.0","method":"mydb.restore","params":{"records":[...]},"id":4}
 ```
 
 ---

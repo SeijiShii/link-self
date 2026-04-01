@@ -18,9 +18,9 @@
 | **発見** | 相手の DID で DHT を検索し、アドレス（PeerID / Multiaddr）を取得。 |
 | **接続・本人確認** | 取得したアドレスに接続し、秘密鍵によるチャレンジ・レスポンスで認証。なりすましは拒絶。 |
 | **メッセージ** | Store-and-Forward。グループ単位で送信（自分を除く各メンバー DID に配信）。相手オフライン時はローカルに保持し、オンライン検知後に送信。 |
-| **グループ** | メンバー DID の集合（2 人以上）。1 対 1 は 2 人グループのケース。メンバーリストは各ノードがローカルに保持。詳細は [グループの概念](group-concept.md) を参照。 |
+| **ネットワーク** | メンバー DID の集合（1 人以上）。1 対 1 は 2 人ネットワークのケース。メンバーリストは各ノードがローカルに保持。詳細は [ネットワークの概念](network-concept.md) を参照。 |
 
-注: 送信・接続 API はグループ汎用（SendToGroup / ConnectToGroup）への移行を計画している。現状実装は 1 対 1（SendMessage / Connect）のまま。
+公開 API: `SendMessage`（1 対 1）、`Connect`（ピア接続）。グループ単位の送信は内部の `SendToGroup` で実装。
 
 ---
 
@@ -147,6 +147,7 @@ Phase 2（インフラモジュール・サンプルアプリ）は、本 Phase 
 
 ## 9. 関連ドキュメント
 
-- [グループの概念](group-concept.md): グループ・オーナー・脱退・権限の扱い。
-- [分散ネットワーク DB 化計画](sync-db-plan.md): アプリからネットワークを DB として扱う設計。
-- [サンプルチャットアプリ計画](../app/sample-chat-app-plan.md): グループ API を用いたサンプルアプリの設計。
+- [ネットワークの概念](network-concept.md): ネットワーク・ロール DAG・脱退・権限の扱い。
+- [データ同期設計](sync-db-plan.md): DeviceSync / GroupShare の二層アーキテクチャ。
+- [データ同期コンセプト](data-sync-concept.md): MyDB 統合 API、Suite / Network の2層概念、権限モデル。
+- [サンプルチャットアプリ計画](../app/sample-chat-app-plan.md): サンプルアプリの設計。

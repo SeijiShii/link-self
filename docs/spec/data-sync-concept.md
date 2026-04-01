@@ -1,7 +1,7 @@
 # データ同期コンセプト
 
 **ステータス:** Phase 1（概念整理）
-**参照:** [sync-db-plan.md](sync-db-plan.md)、[linkself-data-persistence-plan.md](linkself-data-persistence-plan.md)、[group-concept.md](group-concept.md)
+**参照:** [sync-db-plan.md](sync-db-plan.md)、[linkself-data-persistence-plan.md](linkself-data-persistence-plan.md)、[network-concept.md](network-concept.md)
 **設計決定記録:** [data-sync-decisions.md](data-sync-decisions.md)
 
 ---

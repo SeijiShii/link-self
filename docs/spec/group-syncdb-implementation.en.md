@@ -1,7 +1,7 @@
 # Group and Sync DB implementation
 
 **English** (this page) | [日本語](group-syncdb-implementation.md)  
-**See also:** [Group concept](group-concept.en.md), [Sync DB plan](sync-db-plan.en.md)
+**See also:** [Group concept](network-concept.en.md), [Sync DB plan](sync-db-plan.en.md)
 
 This document summarizes **implementation layout, APIs, and tests** in line with the above plans.
 
