@@ -66,6 +66,13 @@ type DeviceStorage interface {
 
 	// ListTables returns the names of all tables that contain at least one record.
 	ListTables(ctx context.Context) ([]string, error)
+
+	// MinSeq returns the lowest sequence number still present in the change log.
+	// Returns 0 if the log is empty.
+	MinSeq(ctx context.Context) (uint64, error)
+
+	// TruncateChangeLog removes all change entries with Seq < minSeq.
+	TruncateChangeLog(ctx context.Context, minSeq uint64) error
 }
 
 // SendFunc sends a payload to a specific peer (identified by libp2p peer ID or address).

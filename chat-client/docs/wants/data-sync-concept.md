@@ -498,15 +498,18 @@ client.PairWithToken(ctx, token)
 
 ## 11. 実装ロードマップ
 
-| Phase | 内容 | スコープ |
-|-------|------|---------|
-| **1** | 用語の決定とドキュメント整備 | 本ドキュメント（コード変更なし） |
-| **2** | API 統合（MyDB を唯一の公開 API に。DB()/SharedDB() 廃止） | `core/pkg/linkself/` |
-| **3** | Config.SuiteID + Roles、ネットワークインスタンス API、ストレージ自動配置 | Config, NetworkAPI |
-| **4** | MyDB に SQL クエリインターフェース統合（Exec/Query/Migrate） | sqlproxy → DeviceSync 連携 |
-| **5** | 権限モデルの実装 + テーブル同期スコープ設定 | テーブル単位の read/write/delete 権限、ロール DAG |
-| **6** | ユーザー鍵/デバイス鍵の2層構造 + ペアリングプロトコル | ID 管理、デバイス追加フロー |
-| **7** | ChangeLog 保持ポリシー + 自動全同期フォールバック | DeviceSync、差分同期 |
+**実装済み:** 用語整理、Role DAG、Network Service、Permission、MyDB (KV)、SharedDB、DB (SQL)、SubAnnouncement 再接続
+
+| Phase | 内容 | スコープ | 依存 |
+|-------|------|---------|------|
+| **A** | ChangeLog 保持ポリシー + 全同期フォールバック | DeviceStorage, ReplicationEngine, Config | なし |
+| **B** | API 統合（MyDB を唯一の公開 API に。DB()/SharedDB() 廃止） | pkg/linkself/, daemon RPC | なし |
+| **C** | SQL-同期接続 + テーブル同期スコープ設定 | sqlproxy → DeviceSync/GroupShare 連携 | B |
+| **D** | Config.SuiteID + ストレージ自動配置 | Config, dataroot | B |
+| **E** | ユーザー鍵/デバイス鍵の2層構造 + ペアリングプロトコル | did, pairing(新規), node | A, B |
+
+**推奨着手順序:** A と B を並行 → C → D と E を並行
+**TDD:** 各ステップは Red→Green→Refactor サイクル。詳細は [実装プラン](../../../.claude/plans/linkself-spec-implementation.md) 参照。
 
 ---
 

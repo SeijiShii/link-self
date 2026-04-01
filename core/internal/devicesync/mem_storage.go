@@ -141,6 +141,28 @@ func (m *MemStorage) LatestSeq(_ context.Context) (uint64, error) {
 	return m.seq, nil
 }
 
+func (m *MemStorage) MinSeq(_ context.Context) (uint64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if len(m.log) == 0 {
+		return 0, nil
+	}
+	return m.log[0].Seq, nil
+}
+
+func (m *MemStorage) TruncateChangeLog(_ context.Context, minSeq uint64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	idx := 0
+	for idx < len(m.log) && m.log[idx].Seq < minSeq {
+		idx++
+	}
+	m.log = m.log[idx:]
+	return nil
+}
+
 func (m *MemStorage) ListTables(_ context.Context) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -177,6 +177,90 @@ func TestMemStorage_ChangeLog(t *testing.T) {
 	}
 }
 
+func TestMemStorage_MinSeq_Empty(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemStorage()
+
+	seq, err := s.MinSeq(ctx)
+	if err != nil {
+		t.Fatalf("MinSeq: %v", err)
+	}
+	if seq != 0 {
+		t.Fatalf("MinSeq on empty log = %d, want 0", seq)
+	}
+}
+
+func TestMemStorage_MinSeq_AfterAppend(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemStorage()
+
+	s.Put(ctx, "t", "a", []byte("1"), 1000)
+	s.Put(ctx, "t", "b", []byte("2"), 2000)
+	s.Put(ctx, "t", "c", []byte("3"), 3000)
+
+	seq, err := s.MinSeq(ctx)
+	if err != nil {
+		t.Fatalf("MinSeq: %v", err)
+	}
+	if seq != 1 {
+		t.Fatalf("MinSeq = %d, want 1", seq)
+	}
+}
+
+func TestMemStorage_TruncateChangeLog(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemStorage()
+
+	s.Put(ctx, "t", "a", []byte("1"), 1000) // seq=1
+	s.Put(ctx, "t", "b", []byte("2"), 2000) // seq=2
+	s.Put(ctx, "t", "c", []byte("3"), 3000) // seq=3
+
+	// Truncate entries with seq < 3 (removes seq=1 and seq=2)
+	err := s.TruncateChangeLog(ctx, 3)
+	if err != nil {
+		t.Fatalf("TruncateChangeLog: %v", err)
+	}
+
+	min, _ := s.MinSeq(ctx)
+	if min != 3 {
+		t.Fatalf("MinSeq after truncate = %d, want 3", min)
+	}
+}
+
+func TestMemStorage_TruncateChangeLog_ChangesSinceReflects(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemStorage()
+
+	s.Put(ctx, "t", "a", []byte("1"), 1000) // seq=1
+	s.Put(ctx, "t", "b", []byte("2"), 2000) // seq=2
+	s.Put(ctx, "t", "c", []byte("3"), 3000) // seq=3
+	s.Put(ctx, "t", "d", []byte("4"), 4000) // seq=4
+
+	// Truncate entries with seq < 3
+	s.TruncateChangeLog(ctx, 3)
+
+	// ChangesSince(0) should only return seq=3 and seq=4
+	entries, err := s.ChangesSince(ctx, 0)
+	if err != nil {
+		t.Fatalf("ChangesSince: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("ChangesSince(0) after truncate = %d entries, want 2", len(entries))
+	}
+	if entries[0].Seq != 3 {
+		t.Fatalf("first entry seq = %d, want 3", entries[0].Seq)
+	}
+	if entries[1].Seq != 4 {
+		t.Fatalf("second entry seq = %d, want 4", entries[1].Seq)
+	}
+
+	// LatestSeq should be unchanged
+	latest, _ := s.LatestSeq(ctx)
+	if latest != 4 {
+		t.Fatalf("LatestSeq = %d, want 4", latest)
+	}
+}
+
 func TestMemStorage_SequenceIncrementsAcrossOps(t *testing.T) {
 	ctx := context.Background()
 	s := NewMemStorage()

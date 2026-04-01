@@ -1,368 +1,239 @@
-# Implementation Plan: LinkSelf Spec-to-Code Alignment
+# Implementation Plan: LinkSelf Spec-to-Code Alignment (v2)
 
 ## Overview
 
-data-sync-concept.md の決定事項（§14）と現行コードベースのギャップを埋める実装計画。
-6 フェーズ構成で、各フェーズは独立にテスト・コミット可能。
+data-sync-decisions.md §4 の設計変更を実装する計画。TDD（テスト先行）で進める。
+5 フェーズ構成、各フェーズ内の各ステップは Red→Green→Refactor サイクルでコミット可能。
+
+**方針:** Red（テスト書く、失敗確認）→ Green（最小実装で通す）→ Refactor
 
 ---
 
-## Current State Summary
+## Current State Summary（2026-04 監査結果）
 
-**実装済み:**
-- DeviceSync / GroupShare 二層アーキテクチャ（internal パッケージ + テスト）
-- 公開 API: `Client.DeviceDB()` / `GroupShare()` / `Groups()`
-- SQLite3 ストレージバックエンド（WAL モード）
-- Group パッケージ（Owners フィールドあり）
-- JSON-RPC daemon（全 API 対応）
-- Topic サブスクリプション + Retention + Dump/Restore
-- Envelope ベースメッセージルーティング
-
-**未実装（仕様で決定済み）:**
-- Suite / Network 2層概念
-- ロール DAG（オーナー廃止）
-- SQL クエリインターフェース
-- ストレージパス自動決定
-- API リネーム（MyDB / SharedDB / NetworkAPI）
+**実装済み（仕様と整合）:**
+- Role DAG + Network Service + Permission（internal/role, network, permission）
+- MyDB (KV: Put/Get/Delete/List/Dump/Restore)
+- SharedDB (Channel + Topic + Subscription + Retention + Purge)
+- DB (SQL: Exec/Query/QueryRow/Migrate via sqlproxy)
 - SubAnnouncement 再接続ハンドシェイク
-- 差分同期時 Retention 情報伝達
-- MyDB Dump/Restore
-- DeviceStorage.ListTables()
+- SQLite3 ストレージバックエンド（WAL モード）
+- Envelope ベースメッセージルーティング
+- dataroot パッケージ
+- ListTables() on DeviceStorage
 - ネットワーク最低 1 人
 
+**問題: 3系統の API が分離して動作**
+- `client.DB()` — SQL だが同期されない（`:memory:` で独立）
+- `client.MyDB()` — 同期されるが KV のみ
+- `client.SharedDB()` — グループ共有だが独立 API
+
+**未実装（新仕様で決定済み）:**
+- API 統合（MyDB を唯一の公開 API に）
+- SQL-同期接続（sqlproxy → DeviceSync/GroupShare）
+- 同期スコープ（テーブル単位の ScopeDevice / ScopeNetwork）
+- ChangeLog 保持ポリシー（MinSeq / TruncateChangeLog）
+- SyncWith() ハンドシェイク + 全同期フォールバック
+- ユーザー鍵 / デバイス鍵の2層構造 + ペアリング
+- Config.SuiteID
+
 ---
 
-## Phase 1: API Rename + MyDB Dump/Restore
+## Phase A: ChangeLog 保持 + 全同期フォールバック
 
-**目的:** 公開 API の名称を仕様に合わせる。MyDB の Dump/Restore を追加。
-**依存:** なし（最初に実行可能）
-**方針:** 内部パッケージ名（devicesync, groupshare）は変更しない。公開 API 層のみ。破壊的変更を許容し、旧名の後方互換は残さない。
+**目的:** ChangeLog の肥大化防止と、長期オフラインデバイスの自動復帰。
+**依存:** なし（即着手可能）
+**仕様参照:** data-sync-decisions.md §4 P5-P7, dump-restore-retention.md §11
 
-### Step 1.1: DeviceDB → MyDB リネーム
+### A-1: DeviceStorage に MinSeq / TruncateChangeLog 追加
 
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `DeviceDB` interface → `MyDB` に rename。旧名は削除 |
-| `pkg/linkself/client.go` | Modify | `DeviceDB()` → `MyDB()` に rename。旧メソッド削除 |
-| `pkg/linkself/api.go` | Modify | 内部 `deviceDB` struct → `myDB` に rename |
-| `pkg/linkself/api_test.go` | Modify | テスト内の `DeviceDB` 参照を `MyDB` に置換 |
-| `pkg/linkself/client_test.go` | Modify | 同上 |
+**Red:**
+```go
+// internal/devicesync/mem_storage_test.go
+func TestMemStorage_MinSeq_Empty(t *testing.T)
+func TestMemStorage_MinSeq_AfterAppend(t *testing.T)
+func TestMemStorage_TruncateChangeLog(t *testing.T)
+func TestMemStorage_TruncateChangeLog_ChangesSinceReflects(t *testing.T)
+```
 
-### Step 1.2: GroupShareAPI → SharedDB リネーム
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `GroupShareAPI` interface → `SharedDB` に rename。旧名削除 |
-| `pkg/linkself/client.go` | Modify | `GroupShare()` → `SharedDB()` に rename。旧メソッド削除 |
-
-### Step 1.3: GroupAPI → NetworkAPI リネーム
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `GroupAPI` interface → `NetworkAPI` に rename。旧名削除 |
-| `pkg/linkself/client.go` | Modify | `Groups()` → `Network()` に rename。旧メソッド削除 |
+| `internal/devicesync/types.go` | Modify | DeviceStorage に `MinSeq(ctx) (uint64, error)` と `TruncateChangeLog(ctx, minSeq uint64) error` 追加 |
+| `internal/devicesync/mem_storage.go` | Modify | MemStorage 実装 |
+| `internal/storage/sqlite/device_storage.go` | Modify | SQLite 版実装 |
 
-### Step 1.4: DeviceStorage.ListTables() 追加
+### A-2: Config に ChangeLogRetention 追加
 
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/devicesync/types.go` | Modify | `DeviceStorage` interface に `ListTables(ctx) ([]string, error)` 追加 |
-| `internal/devicesync/mem_storage.go` | Modify | `MemStorage.ListTables` 実装 |
-| `internal/devicesync/mem_storage_test.go` | Modify | ListTables テスト追加 |
-| `internal/storage/sqlite/device_storage.go` | Modify | SQLite 版 ListTables 実装 |
-| `internal/storage/sqlite/sqlite_test.go` | Modify | SQLite ListTables テスト追加 |
+**Red:**
+```go
+// pkg/linkself/api_test.go or types_test.go
+func TestChangeLogRetention_Defaults(t *testing.T)
+```
 
-### Step 1.5: MyDB Dump/Restore
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/devicesync/replication.go` | Modify | `ReplicationEngine.Dump(ctx)` / `Restore(ctx, records)` 追加 |
-| `internal/devicesync/replication_test.go` | Modify | Dump/Restore テスト追加 |
-| `pkg/linkself/types.go` | Modify | `MyDB` interface に `Dump` / `Restore` 追加 |
-| `pkg/linkself/api.go` | Modify | MyDB Dump/Restore の公開 API 実装 |
-| `pkg/linkself/api_test.go` | Modify | テスト追加 |
-
-### Step 1.6: daemon RPC 更新
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `cmd/linkself-daemon/main.go` | Modify | `devicedb.*` → `mydb.*`、`groupshare.*` → `shareddb.*`、`groups.*` → `network.*` に rename。旧名削除 |
-| `cmd/linkself-daemon/main.go` | Modify | `mydb.dump` / `mydb.restore` 追加 |
+| `pkg/linkself/types.go` | Modify | `RetentionMode`, `ChangeLogRetention` 型、`Config.ChangeLogRetention` 追加 |
+
+### A-3: ReplicationEngine に自動切り捨て組み込み
+
+**Red:**
+```go
+// internal/devicesync/replication_test.go
+func TestReplicationEngine_Put_TriggersRetention_TimeBased(t *testing.T)
+func TestReplicationEngine_Put_TriggersRetention_CountBased(t *testing.T)
+func TestReplicationEngine_DefaultRetention(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/devicesync/replication.go` | Modify | RetentionPolicy を注入、Put/Delete 後に enforce |
+
+### A-4: SyncWith ハンドシェイク + 全同期フォールバック
+
+**Red:**
+```go
+// internal/devicesync/replication_test.go
+func TestReplicationEngine_SyncWith_IncrementalSync(t *testing.T)
+func TestReplicationEngine_SyncWith_GapDetected_FullSync(t *testing.T)
+func TestReplicationEngine_SyncWith_NoPeer(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/devicesync/replication.go` | Modify | SyncWith 実装: seq交換 → ギャップ検出 → 差分 or Dump/Restore |
 
 ### Tests
 ```bash
-go test ./pkg/linkself/ -timeout 120s
 go test ./internal/devicesync/... -v
 go test ./internal/storage/sqlite/... -v
+go test ./pkg/linkself/ -timeout 120s
+```
+
+---
+
+## Phase B: API 統合（MyDB を唯一の公開 API に）
+
+**目的:** DB() と SharedDB() を廃止し、MyDB に SQL 能力を統合。
+**依存:** なし（Phase A と並行可能）
+**仕様参照:** data-sync-decisions.md §4 P1
+
+### B-1: MyDB に SQL メソッド追加
+
+**Red:**
+```go
+// pkg/linkself/api_test.go
+func TestMyDB_Exec_CreateTable(t *testing.T)
+func TestMyDB_Exec_Insert(t *testing.T)
+func TestMyDB_Query_Select(t *testing.T)
+func TestMyDB_QueryRow(t *testing.T)
+func TestMyDB_Migrate(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `pkg/linkself/types.go` | Modify | MyDB に Exec/Query/QueryRow/Migrate 追加 |
+| `pkg/linkself/api.go` | Modify | myDB struct に proxy 統合、SQL メソッド実装 |
+
+### B-2: DB() / SharedDB() を Client から削除
+
+**Red:**
+```go
+func TestClient_MyDB_HasSQL(t *testing.T)
+// コンパイル時に DB()/SharedDB() が存在しないことを保証
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `pkg/linkself/types.go` | Modify | Client から DB()/SharedDB() 削除。DB/SharedDB interface 削除 |
+| `pkg/linkself/client.go` | Modify | DB()/SharedDB() メソッド削除、sqlproxy を myDB 内部に |
+| `pkg/linkself/api.go` | Modify | dbAPI/sharedDB struct 削除 |
+
+### B-3: 既存テスト・daemon RPC の更新
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `pkg/linkself/api_test.go` | Modify | 旧 DB/SharedDB テストを MyDB テストに統合 |
+| `pkg/linkself/client_test.go` | Modify | DB()/SharedDB() 参照削除 |
+| `test/integration/*_test.go` | Modify | 統合テスト更新 |
+| `cmd/linkself-daemon/main.go` | Modify | `db.*` → `mydb.exec/query/migrate`、`shareddb.*` 削除 |
+
+### Tests
+```bash
+go test ./pkg/linkself/ -timeout 120s
 go test ./cmd/linkself-daemon/ -v
-```
-
----
-
-## Phase 2: Network Concept (Group → Network Migration)
-
-**目的:** Group パッケージを Network パッケージで置換。ネットワーク最低 1 人。ロール DAG の基盤。
-**依存:** Phase 1 完了
-**方針:** internal/group は削除し internal/network で置換。Owners フィールド廃止。破壊的変更。
-
-### Step 2.1: ロール DAG パッケージ作成
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/role/role.go` | Create | `RoleDef`, `RoleDefs`, `DAG` 型。`HasRole(memberRole, required)` で包含判定 |
-| `internal/role/role_test.go` | Create | DAG 構築、包含判定、循環参照検出テスト |
-
-```go
-// pseudo-code
-type RoleDef struct { Includes []string }
-type RoleDefs map[string]RoleDef
-type DAG struct { defs RoleDefs; ancestors map[string]map[string]bool }
-
-func NewDAG(defs RoleDefs) (*DAG, error) // 循環参照チェック
-func (d *DAG) HasRole(memberRole, requiredRole string) bool
-```
-
-### Step 2.2: Network パッケージ作成
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/network/types.go` | Create | `Network` 型（ID, SuiteID, Members, MemberRoles）。最低 1 人 |
-| `internal/network/store.go` | Create | `Store` interface（CRUD + ListBySuite + ListForMember） |
-| `internal/network/memstore.go` | Create | インメモリ Store 実装 |
-| `internal/network/service.go` | Create | `Service`（Create, Join, Leave, SetMemberRole, Kick）。権限はロール DAG ベース |
-| `internal/network/service_test.go` | Create | ネットワーク CRUD、ロール権限、最低 1 人テスト |
-| `internal/network/store_test.go` | Create | Store 単体テスト |
-
-```go
-// pseudo-code
-type Network struct {
-    ID          string
-    SuiteID     string
-    Members     []string
-    MemberRoles map[string]string // DID → role name
-}
-
-type Service struct { store Store; dag *role.DAG; adminRole string }
-
-func (s *Service) Create(ctx, suiteID, creatorDID string) (string, error) // min 1 member
-func (s *Service) AddMember(ctx, networkID, requesterDID, memberDID, role string) error
-func (s *Service) Leave(ctx, networkID, memberDID string) error
-func (s *Service) Kick(ctx, networkID, requesterDID, targetDID string) error
-func (s *Service) SetMemberRole(ctx, networkID, requesterDID, targetDID, role string) error
-```
-
-### Step 2.3: Group パッケージ削除 + 参照切り替え
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/group/` | Delete | group パッケージ全体を削除（group.go, store.go, memstore.go, テスト） |
-| `internal/groupshare/layer.go` | Modify | `MemberResolver` の実装を network.Store ベースに切り替え |
-| `internal/storage/sqlite/group_store.go` | Delete | SQLite group store 削除 |
-| `internal/storage/sqlite/migrate.go` | Modify | groups テーブル → networks + member_roles テーブルに置換 |
-| `pkg/linkself/backend.go` | Modify | backendStorages から group.Store を削除、network.Store に置換 |
-| `test/integration/syncdb_test.go` | Modify | group.Store 参照を network.Store に置換 |
-| `test/integration/groupshare_integration_test.go` | Modify | 同上 |
-
-### Step 2.4: 公開 API の NetworkAPI 拡張
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `NetworkAPI` に `Create`, `List`, `Select`, `SetMemberRole`, `GetMemberRole` 追加 |
-| `pkg/linkself/api.go` | Modify | NetworkAPI 実装を network パッケージに接続 |
-
-### Step 2.5: Config に SuiteID + Roles 追加
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `Config` に `SuiteID string` と `Roles RoleDefs` 追加 |
-| `pkg/linkself/client.go` | Modify | Start 時に DAG 構築、NetworkAPI にロール DAG 注入 |
-
-### Step 2.6: SQLite Network Store
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/storage/sqlite/network_store.go` | Create | SQLite 版 network.Store 実装 |
-| `internal/storage/sqlite/migrate.go` | Modify | networks + member_roles テーブルのマイグレーション追加 |
-
-### Tests
-```bash
-go test ./internal/role/... -v
-go test ./internal/network/... -v
-go test ./pkg/linkself/ -timeout 120s
-```
-
----
-
-## Phase 3: Storage Auto-Placement (Suite/Network Directory Structure)
-
-**目的:** ストレージパスを LinkSelf が自動決定。`Config.StorageBackend` を非推奨化。
-**依存:** Phase 2 完了
-
-### Step 3.1: データルート決定ロジック
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/dataroot/dataroot.go` | Create | プラットフォーム別データルート取得。`LINKSELF_DATA_DIR` 環境変数オーバーライド |
-| `internal/dataroot/dataroot_test.go` | Create | テスト |
-
-```go
-func DefaultRoot() (string, error) // OS 別: XDG, AppData, ~/Library/...
-func DIDDir(root, did string) string // root/<encoded-DID>/
-func SuiteDir(root, did, suiteID string) string
-func NetworkDir(root, did, suiteID, instanceID string) string
-func EncodeDID(did string) string // ファイルシステム安全な変換
-```
-
-### Step 3.2: Config 変更
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `StorageBackend` フィールド削除。`DataDir string` 追加（オプション、デフォルトは自動決定） |
-| `pkg/linkself/client.go` | Modify | Start 時に dataroot でパス決定 → SQLite を自動オープン |
-| `pkg/linkself/backend.go` | Delete | StorageBackend 抽象化は不要に（SQLite 固定） |
-| `pkg/linkself/backend_test.go` | Delete | 同上 |
-
-### Step 3.3: DID 一覧 API
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `Client` に `ListDIDs() ([]string, error)` 追加 |
-| `pkg/linkself/client.go` | Modify | データルート下の DID ディレクトリを列挙 |
-
-### Step 3.4: daemon 対応
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `cmd/linkself-daemon/main.go` | Modify | `start` パラメータに `suiteID` 追加。`storageBackend` パラメータ削除 |
-
-### Tests
-```bash
-go test ./internal/dataroot/... -v
-go test ./pkg/linkself/ -timeout 120s
-```
-
----
-
-## Phase 4: SubAnnouncement Reconnection + Retention Sync
-
-**目的:** 接続確立時の SubAnnouncement 自動交換、差分同期時の Retention 情報伝達。
-**依存:** Phase 1 完了（Phase 2-3 と並行可能）
-
-### Step 4.1: SubAnnouncement 再接続ハンドシェイク
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/groupshare/layer.go` | Modify | `AnnounceAllSubscriptions(ctx, peerDIDs)` 追加。LocalSubs の全エントリを送信 |
-| `internal/node/node.go` | Modify | 認証完了コールバックで `AnnounceAllSubscriptions` を呼び出し |
-| `internal/groupshare/groupshare_test.go` | Modify | 再接続時 SubAnnouncement テスト追加 |
-
-### Step 4.2: 差分同期時の Retention 情報伝達
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/groupshare/types.go` | Modify | `RetentionInfo` 型追加（channel → duration map） |
-| `internal/groupshare/layer.go` | Modify | `GetRetentionInfo()` 追加。差分同期ハンドシェイクに組み込み |
-| `internal/devicesync/replication.go` | Modify | `SyncWith` で Retention 情報を考慮、期限切れレコードスキップ |
-
-### Tests
-```bash
-go test ./internal/groupshare/... -v
-go test ./internal/devicesync/... -v
 go test ./test/integration/... -v -timeout 120s
 ```
 
 ---
 
-## Phase 5: Permission Model (Role DAG + Table Permissions)
+## Phase C: SQL-同期接続 + 同期スコープ
 
-**目的:** テーブル単位の read/write/delete 権限。ロール DAG に基づくアクセス制御。
-**依存:** Phase 2 完了
+**目的:** sqlproxy の書き込みを DeviceSync / GroupShare に接続。テーブル単位のスコープ設定。
+**依存:** Phase B 完了
+**仕様参照:** data-sync-decisions.md §4 P2, P4
 
-### Step 5.1: テーブル権限定義
+### C-1: sqlproxy OnWrite フック
 
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/permission/permission.go` | Create | `Permissions` 型、`Check(dag, memberRole, op)` で権限判定 |
-| `internal/permission/permission_test.go` | Create | 権限判定テスト（ロール包含、self、owner、members） |
-
+**Red:**
 ```go
-type Permissions struct {
-    Read   string // role name, "self", "owner", "members"
-    Write  string
-    Delete string
-}
-func Check(dag *role.DAG, memberRole, required string) bool
+// internal/sqlproxy/proxy_test.go
+func TestProxy_OnWrite_Insert(t *testing.T)
+func TestProxy_OnWrite_Update(t *testing.T)
+func TestProxy_OnWrite_Delete(t *testing.T)
+func TestProxy_OnWrite_SelectNoFire(t *testing.T)
 ```
 
-### Step 5.2: GroupShareLayer に権限統合
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `internal/groupshare/layer.go` | Modify | Channel に Permissions 追加。Put/Get/Delete 時にロール DAG 権限チェック |
-| `internal/groupshare/types.go` | Modify | `Channel` に `Perms *permission.Permissions` 追加 |
+| `internal/sqlproxy/proxy.go` | Modify | WriteEvent 型 + OnWrite コールバック追加 |
 
-### Step 5.3: read 権限による同期範囲制御
+### C-2: SyncScope 型とメタデータ
 
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/groupshare/layer.go` | Modify | read=self → 自デバイスのみ、read=role → 該当ロール以上のメンバーのみに配信 |
-
-### Tests
-```bash
-go test ./internal/permission/... -v
-go test ./internal/groupshare/... -v
-```
-
----
-
-## Phase 6: SQL Query Interface
-
-**目的:** アプリ向け最終 API。`client.DB().Exec()` / `Query()` を提供。
-**依存:** Phase 2, 3, 5 完了
-
-### Step 6.1: DB インターフェース定義
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `DB` interface 追加 |
-
+**Red:**
 ```go
-type DB interface {
-    Exec(ctx context.Context, sql string, args ...any) (Result, error)
-    Query(ctx context.Context, sql string, args ...any) (*Rows, error)
-    QueryRow(ctx context.Context, sql string, args ...any) *Row
-    SetPermissions(ctx context.Context, table string, perms Permissions) error
-    Migrate(ctx context.Context, migrations []Migration) error
-}
-type Migration struct { Version int; SQL string }
+// pkg/linkself/api_test.go
+func TestMyDB_SetSyncScope_Device(t *testing.T)
+func TestMyDB_SetSyncScope_Network(t *testing.T)
+func TestMyDB_SetSyncScope_IncludeExisting_True(t *testing.T)
+func TestMyDB_SetSyncScope_IncludeExisting_False(t *testing.T)
 ```
 
-### Step 6.2: SQL プロキシ層
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `internal/sqlproxy/proxy.go` | Create | SQL → ローカル SQLite 実行 → ChangeLog 記録 → 同期トリガー |
-| `internal/sqlproxy/intercept.go` | Create | INSERT/UPDATE/DELETE を検知し同期対象に変換 |
-| `internal/sqlproxy/proxy_test.go` | Create | 基本 CRUD テスト |
+| `pkg/linkself/types.go` | Modify | SyncScope 型、SyncScopeOption、WithIncludeExisting 追加 |
+| `pkg/linkself/api.go` | Modify | SetSyncScope 実装、スコープメタデータ管理 |
 
-### Step 6.3: Client.DB() 統合
+### C-3: 書き込みルーティング
 
-| File | Operation | Description |
-|------|-----------|-------------|
-| `pkg/linkself/client.go` | Modify | `DB()` メソッド追加。Network.Select 後に利用可能 |
+**Red:**
+```go
+// test/integration/sync_scope_test.go
+func TestSyncScope_Device_OnlySameUserDevices(t *testing.T)
+func TestSyncScope_Network_BroadcastToMembers(t *testing.T)
+```
 
-### Step 6.4: スキーマ同期 + 保留キュー
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/sqlproxy/schema.go` | Create | CREATE TABLE / ALTER TABLE をメタテーブルに記録・MyDB 経由で同期 |
-| `internal/sqlproxy/pending.go` | Create | 保留キュー（上限あり、超過分は破棄→差分同期で再取得） |
-
-### Step 6.5: daemon RPC 拡張
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `cmd/linkself-daemon/main.go` | Modify | `db.exec`, `db.query`, `db.setPermissions`, `db.migrate` 追加 |
+| `pkg/linkself/api.go` | Modify | OnWrite でスコープ確認 → DeviceSync or GroupShare にルーティング |
+| `pkg/linkself/client.go` | Modify | 受信ハンドラで sqlproxy SQLite にも反映 |
 
 ### Tests
 ```bash
@@ -373,141 +244,138 @@ go test ./test/integration/... -v -timeout 120s
 
 ---
 
-## Phase 7: API 統合（MyDB を唯一の公開 API に）
+## Phase D: SuiteID + ストレージ自動配置
 
-> **追加（2026-04）:** [data-sync-concept.md §15](chat-client/docs/wants/data-sync-concept.md) の設計変更を反映。
+**目的:** Config.SuiteID の追加。ストレージパスの自動決定を SuiteID ベースに。
+**依存:** Phase B 完了
+**仕様参照:** data-sync-concept.md §3, §9, §10
 
-**目的:** `DB()` と `SharedDB()` を廃止し、`MyDB()` を唯一の公開 API に統合。SQL 対応。
-**依存:** Phase 6 完了
+### D-1: Config.SuiteID
 
-### 変更概要
+**Red:**
+```go
+func TestClient_Start_WithSuiteID(t *testing.T)
+func TestClient_Start_WithoutSuiteID(t *testing.T)
+```
 
-| 変更 | 詳細 |
-|------|------|
-| DB() 廃止 | `client.DB()` を削除。SQL 機能は MyDB に統合 |
-| SharedDB() 廃止 | `client.SharedDB()` を削除。groupshare は内部メカニズムとして残す |
-| MyDB に SQL 統合 | `MyDB.Exec()`, `MyDB.Query()`, `MyDB.Migrate()` を追加 |
-| 同期スコープ設定 | `MyDB.SetSyncScope(table, scope, networkID)` を追加 |
-| 昇格オプション | `SetSyncScope` に `WithIncludeExisting(bool)` オプション |
-
-### 影響ファイル
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `pkg/linkself/types.go` | Modify | `DB` interface 廃止、`SharedDB` interface 廃止。`MyDB` に Exec/Query/Migrate/SetSyncScope 追加 |
-| `pkg/linkself/client.go` | Modify | `DB()`, `SharedDB()` メソッド削除。`MyDB()` に sqlproxy 統合 |
-| `pkg/linkself/api.go` | Modify | `dbAPI`, `sharedDB` struct 削除。`myDB` に統合 |
-| `cmd/linkself-daemon/main.go` | Modify | `db.*`, `shareddb.*` RPC 廃止。`mydb.exec`, `mydb.query` 等に統合 |
+| `pkg/linkself/types.go` | Modify | Config.SuiteID 追加 |
+| `pkg/linkself/client.go` | Modify | Start() で SuiteID → dataroot.SuiteDir() でパス決定 |
+| `internal/dataroot/dataroot.go` | Modify | SuiteDir に SuiteID 統合 |
+
+### Tests
+```bash
+go test ./internal/dataroot/... -v
+go test ./pkg/linkself/ -timeout 120s
+```
 
 ---
 
-## Phase 8: ユーザー鍵 / デバイス鍵の2層構造
+## Phase E: ユーザー鍵 / デバイス鍵の2層構造
 
-> **追加（2026-04）:** [data-sync-concept.md §5.1](chat-client/docs/wants/data-sync-concept.md) の設計変更を反映。
+**目的:** 各デバイスに固有鍵。ユーザー鍵はペアリングで安全に転送。
+**依存:** Phase A, B 完了（D と並行可能）
+**仕様参照:** data-sync-concept.md §5.1
 
-**目的:** 各デバイスに固有鍵を持たせ、ユーザー鍵はペアリングで安全に転送。
-**依存:** Phase 2 完了
+### E-1: Identity の2層化
 
-### 変更概要
+**Red:**
+```go
+// internal/did/identity_test.go
+func TestGenerateUserIdentity(t *testing.T)
+func TestGenerateDeviceIdentity(t *testing.T)
+func TestUserAndDeviceDID_AreDifferent(t *testing.T)
+```
 
-| 変更 | 詳細 |
-|------|------|
-| Identity の2層化 | `UserIdentity`（ユーザー鍵、ネットワーク向け）+ `DeviceIdentity`（デバイス鍵、ペアリング向け） |
-| ペアリング API | `CreatePairingToken()`, `PairWithToken()` を Client に追加 |
-| ペアリングプロトコル | 時間制限トークン → 接続 → ユーザー鍵の暗号化転送 |
-| DeviceSync の前提変更 | 「同一秘密鍵」→「同一ユーザー鍵を共有するペアリング済みデバイス群」 |
-
-### 新規ファイル
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/pairing/pairing.go` | Create | ペアリングプロトコル実装（トークン生成、接続、鍵転送） |
-| `internal/pairing/token.go` | Create | 時間制限トークンの生成・検証 |
-| `internal/pairing/pairing_test.go` | Create | ペアリングフローテスト |
-
-### 影響ファイル
+**Green:**
 
 | File | Operation | Description |
 |------|-----------|-------------|
-| `internal/did/identity.go` | Modify | UserIdentity / DeviceIdentity の分離 |
-| `internal/node/node.go` | Modify | 認証でユーザー鍵を使用、デバイス鍵はペアリングのみ |
-| `pkg/linkself/types.go` | Modify | `Client` に `CreatePairingToken`, `PairWithToken` 追加 |
+| `internal/did/identity.go` | Modify | UserIdentity / DeviceIdentity 分離 |
+
+### E-2: ペアリングトークン
+
+**Red:**
+```go
+// internal/pairing/token_test.go
+func TestCreateToken_HasExpiry(t *testing.T)
+func TestValidateToken_Valid(t *testing.T)
+func TestValidateToken_Expired(t *testing.T)
+func TestValidateToken_Tampered(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/pairing/token.go` | Create | 時間制限トークン生成・検証 |
+
+### E-3: ペアリングプロトコル
+
+**Red:**
+```go
+// internal/pairing/protocol_test.go
+func TestPairing_FullFlow(t *testing.T)
+func TestPairing_ExpiredToken(t *testing.T)
+func TestPairing_WrongToken(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/pairing/protocol.go` | Create | ペアリングハンドシェイク実装 |
+
+### E-4: 公開 API + 統合テスト
+
+**Red:**
+```go
+// test/integration/pairing_test.go
+func TestPairing_TwoDevices_SyncAfterPair(t *testing.T)
+```
+
+**Green:**
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `pkg/linkself/types.go` | Modify | Client に CreatePairingToken/PairWithToken 追加 |
 | `pkg/linkself/client.go` | Modify | ペアリング API 実装 |
+| `internal/node/node.go` | Modify | 認証でユーザー鍵使用、デバイスリスト管理 |
+| `internal/devicesync/replication.go` | Modify | PeerProvider を「ペアリング済みデバイス群」に変更 |
 
----
-
-## Phase 9: ChangeLog 保持ポリシー + 全同期フォールバック
-
-> **追加（2026-04）:** [dump-restore-retention.md §11](docs/dump-restore-retention.md) の設計変更を反映。
-
-**目的:** ChangeLog の肥大化防止と、長期オフラインデバイスの自動復帰。
-**依存:** Phase 1 完了
-
-### 変更概要
-
-| 変更 | 詳細 |
-|------|------|
-| ChangeLog 切り捨て | TimeBased（デフォルト30日）/ CountBased（デフォルト10000件） |
-| 最小 seq 追跡 | DeviceStorage に `MinSeq()` を追加 |
-| ギャップ検出 | 要求 seq < MinSeq でフォールバック判定 |
-| 自動全同期 | Dump/Restore を自動実行。権限確認付き |
-
-### 影響ファイル
-
-| File | Operation | Description |
-|------|-----------|-------------|
-| `internal/devicesync/types.go` | Modify | `DeviceStorage` に `MinSeq()`, `TruncateChangeLog()` 追加 |
-| `internal/devicesync/replication.go` | Modify | Put/Delete 時に切り捨て実行。SyncWith でギャップ検出 → 全同期フォールバック |
-| `internal/devicesync/mem_storage.go` | Modify | 切り捨て・MinSeq 実装 |
-| `internal/storage/sqlite/device_storage.go` | Modify | SQLite 版の切り捨て・MinSeq 実装 |
-| `pkg/linkself/types.go` | Modify | `Config` に `ChangeLogRetention` 追加 |
-
----
-
-## Phase Dependencies（更新版）
-
-```
-Phase 1 (API Rename + MyDB Dump)
-    ↓
-Phase 2 (Network + Role DAG)  ←→  Phase 4 (SubAnnounce + Retention Sync)
-    ↓                               ↑
-Phase 3 (Storage Auto-Placement)    Phase 9 (ChangeLog Retention + Full Sync Fallback)
-    ↓
-Phase 5 (Permission Model)
-    ↓
-Phase 6 (SQL Query Interface)
-    ↓
-Phase 7 (API 統合: MyDB 唯一の公開 API)
-
-Phase 8 (User/Device Key) ← Phase 2 完了後に着手可能
+### Tests
+```bash
+go test ./internal/did/... -v
+go test ./internal/pairing/... -v
+go test ./pkg/linkself/ -timeout 120s
+go test ./test/integration/... -v -timeout 120s
 ```
 
-Phase 9 は Phase 1 のみに依存し、早期着手可能。
-Phase 7 は Phase 6 完了が前提。
-Phase 8 は Phase 2 完了後に並行実行可能。
+---
+
+## Phase Dependencies
+
+```
+Phase A (ChangeLog保持 + 全同期)     Phase D (SuiteID + ストレージ)
+    独立、即着手可能                      Phase B 完了後
+                                          ↑
+Phase B (API統合: MyDB唯一)  ──────→  Phase C (SQL-同期接続 + スコープ)
+    独立、即着手可能
+
+Phase E (ユーザー鍵/デバイス鍵)
+    Phase A, B 完了後（D と並行可能）
+```
+
+**推奨着手順序:** A と B を並行 → C → D と E を並行
 
 ---
 
-## Risks and Mitigation（更新版）
+## Decision References
 
-| Risk | Mitigation |
-|------|------------|
-| Group→Network 移行で既存テスト破損 | 破壊的変更を許容。テストを一括更新。internal/group は internal/network に置換 |
-| SQL プロキシ層の複雑性 | Phase 6 を先に完成。Phase 7 で MyDB に統合 |
-| SQLite WAL と複数プロセス同時アクセス | Phase 3 で WAL モード前提。複数プロセス問題は仕様どおり後続検討 |
-| ロール DAG の循環参照 | NewDAG() 構築時にバリデーション。エラーを返す |
-| 差分同期のプロトコル互換性 | 破壊的変更を許容。プロトコルバージョンを上げる |
-| chat-client (Electron) の daemon RPC 呼び出し | RPC メソッド名変更に合わせて chat-client 側も一括更新 |
-| ユーザー鍵のペアリング転送セキュリティ | ECDH + AES-GCM 等の暗号化。時間制限トークンで窓を制限 |
-| ChangeLog 切り捨てと全同期のパフォーマンス | 全同期前に権限確認し、必要テーブルのみ同期。大量データは分割転送 |
-| DB()/SharedDB() 廃止の破壊的変更 | Phase 7 まで既存 API を維持。Phase 7 で一括廃止 |
-
----
-
-## Decision References（更新版）
-
-- [data-sync-concept.md §14](chat-client/docs/wants/data-sync-concept.md) — 初回仕様精査の決定事項一覧
-- [data-sync-concept.md §15](chat-client/docs/wants/data-sync-concept.md) — 個人マルチデバイス精査による設計変更（API統合、2層鍵、昇格、ChangeLog保持）
-- [sync-db-plan.md §9](docs/sync-db-plan.md) — 用語の進化 + オーナー→ロール DAG
-- [dump-restore-retention.md §8-10](docs/dump-restore-retention.md) — MyDB Dump, Retention Sync, 保留キュー
-- [dump-restore-retention.md §11](docs/dump-restore-retention.md) — ChangeLog 保持ポリシー + 全同期フォールバック
+- [data-sync-concept.md](chat-client/docs/wants/data-sync-concept.md) — 仕様本体
+- [data-sync-decisions.md §4](chat-client/docs/wants/data-sync-decisions.md) — 個人マルチデバイス精査による設計変更
+- [sync-db-plan.md §1.3-1.4](docs/sync-db-plan.md) — API統合方針、2層鍵方針
+- [dump-restore-retention.md §11](docs/dump-restore-retention.md) — ChangeLog保持ポリシー + 全同期フォールバック

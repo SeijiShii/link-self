@@ -157,6 +157,23 @@ func (s *deviceStorage) LatestSeq(ctx context.Context) (uint64, error) {
 	return uint64(seq.Int64), nil
 }
 
+func (s *deviceStorage) MinSeq(ctx context.Context) (uint64, error) {
+	var seq sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT MIN(seq) FROM change_log`).Scan(&seq)
+	if err != nil {
+		return 0, err
+	}
+	if !seq.Valid {
+		return 0, nil
+	}
+	return uint64(seq.Int64), nil
+}
+
+func (s *deviceStorage) TruncateChangeLog(ctx context.Context, minSeq uint64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM change_log WHERE seq < ?`, minSeq)
+	return err
+}
+
 func (s *deviceStorage) ListTables(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT tbl FROM device_records`)
 	if err != nil {
