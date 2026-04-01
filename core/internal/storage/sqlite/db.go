@@ -12,6 +12,7 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
 	"github.com/SeijiShii/link-self/core/internal/group"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
+	"github.com/SeijiShii/link-self/core/internal/network"
 	"github.com/SeijiShii/link-self/core/internal/syncdb"
 )
 
@@ -75,4 +76,9 @@ func (db *DB) SubscriptionStore() groupshare.SubscriptionStore {
 // GroupStore returns a group.Store backed by this DB.
 func (db *DB) GroupStore() group.Store {
 	return &groupStore{db: db.conn}
+}
+
+// NetworkStore returns a network.Store backed by this DB.
+func (db *DB) NetworkStore() network.Store {
+	return &networkStore{db: db.conn}
 }

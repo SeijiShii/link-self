@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/SeijiShii/link-self/core/internal/permission"
+	"github.com/SeijiShii/link-self/core/internal/role"
 )
 
 var (
@@ -17,14 +20,16 @@ var (
 // GroupShareLayer manages app-defined shared data channels and handles
 // sending/receiving shared records between group members.
 type GroupShareLayer struct {
-	Storage        SharedStorage
-	MemberResolver MemberResolver
-	SendGroup      SendGroupFunc
-	SelfDID        string
-	LocalSubs      SubscriptionStore // this device's subscriptions; nil = no persistence
-	RemoteSubs     SubscriptionStore // remote peers' subscriptions; nil = send to all
-	SendSubAnnounce SendGroupFunc    // sends sub announcements; nil = no broadcast
-	channels       map[string]*Channel
+	Storage            SharedStorage
+	MemberResolver     MemberResolver
+	SendGroup          SendGroupFunc
+	SelfDID            string
+	LocalSubs          SubscriptionStore  // this device's subscriptions; nil = no persistence
+	RemoteSubs         SubscriptionStore  // remote peers' subscriptions; nil = send to all
+	SendSubAnnounce    SendGroupFunc      // sends sub announcements; nil = no broadcast
+	roleDAG            *role.DAG          // nil = skip role-based permission checks
+	memberRoleResolver MemberRoleResolver // nil = skip role-based permission checks
+	channels           map[string]*Channel
 }
 
 // NewGroupShareLayer creates a new GroupShareLayer.
@@ -144,6 +149,9 @@ func (l *GroupShareLayer) Put(ctx context.Context, channel, topic, id string, bo
 
 	if ch.Access != nil && !ch.Access.CanWrite(l.SelfDID) {
 		return ErrAccessDenied
+	}
+	if err := l.checkPerm(ctx, ch, l.SelfDID, permWrite); err != nil {
+		return err
 	}
 
 	now := time.Now().UnixMilli()
@@ -290,6 +298,9 @@ func (l *GroupShareLayer) HandleIncoming(ctx context.Context, payload []byte) er
 	if ch.Access != nil && !ch.Access.CanRead(rec.DID) {
 		return ErrAccessDenied
 	}
+	if err := l.checkPerm(ctx, ch, rec.DID, permRead); err != nil {
+		return err
+	}
 
 	// Validate schema (only for non-delete)
 	if !rec.Deleted && ch.Schema != nil {
@@ -362,4 +373,41 @@ func (l *GroupShareLayer) broadcast(ctx context.Context, ch *Channel, rec *Share
 	}
 
 	return l.SendGroup(ctx, members, payload)
+}
+
+// permOp identifies which permission field to check.
+type permOp int
+
+const (
+	permRead permOp = iota
+	permWrite
+	permDelete
+)
+
+// checkPerm verifies role-based permission for the given DID on the channel.
+// Returns nil if no role DAG or no Perms are configured (allow all).
+func (l *GroupShareLayer) checkPerm(ctx context.Context, ch *Channel, did string, op permOp) error {
+	if l.roleDAG == nil || ch.Perms == nil || l.memberRoleResolver == nil {
+		return nil
+	}
+	memberRole, err := l.memberRoleResolver.MemberRole(ctx, ch.GroupID, did)
+	if err != nil {
+		return err
+	}
+	var required string
+	switch op {
+	case permRead:
+		required = ch.Perms.Read
+	case permWrite:
+		required = ch.Perms.Write
+	case permDelete:
+		required = ch.Perms.Delete
+	}
+	if required == "" {
+		return nil
+	}
+	if !permission.Check(l.roleDAG, memberRole, required) {
+		return ErrAccessDenied
+	}
+	return nil
 }

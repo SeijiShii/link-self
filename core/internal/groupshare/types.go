@@ -7,6 +7,9 @@ package groupshare
 import (
 	"context"
 	"time"
+
+	"github.com/SeijiShii/link-self/core/internal/permission"
+	"github.com/SeijiShii/link-self/core/internal/role"
 )
 
 // SchemaValidator validates a record body before accepting it.
@@ -26,9 +29,10 @@ type AccessPolicy interface {
 type Channel struct {
 	Name      string
 	GroupID   string
-	Schema    SchemaValidator // nil = accept any body
-	Access    AccessPolicy    // nil = allow all
-	Retention time.Duration   // 0 = permanent (master data)
+	Schema    SchemaValidator        // nil = accept any body
+	Access    AccessPolicy           // nil = allow all
+	Retention time.Duration          // 0 = permanent (master data)
+	Perms     *permission.Permissions // nil = allow all (role-based check)
 }
 
 // SharedRecord is the unit of data exchanged between group members.
@@ -60,6 +64,22 @@ type SharedStorage interface {
 // MemberResolver returns the member DIDs for a group, excluding self.
 type MemberResolver interface {
 	MemberDIDsForGroup(ctx context.Context, groupID string) ([]string, error)
+}
+
+// MemberRoleResolver returns the role of a member in a group.
+// Returns empty string if the member has no role assigned.
+type MemberRoleResolver interface {
+	MemberRole(ctx context.Context, groupID, memberDID string) (string, error)
+}
+
+// RoleDAG returns the role DAG. Nil means no role-based permission checks.
+func (l *GroupShareLayer) SetRoleDAG(dag *role.DAG) {
+	l.roleDAG = dag
+}
+
+// SetMemberRoleResolver sets the resolver for member roles.
+func (l *GroupShareLayer) SetMemberRoleResolver(r MemberRoleResolver) {
+	l.memberRoleResolver = r
 }
 
 // SendGroupFunc sends a payload to a list of DIDs.

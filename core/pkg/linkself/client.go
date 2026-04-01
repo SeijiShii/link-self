@@ -202,6 +202,9 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	n.SetOnSubAnnounce(func(peerDID string, payload []byte) {
 		_ = gsLayer.HandleSubAnnouncement(peerDID, payload)
 	})
+	n.SetOnAuthSuccess(func(peerDID string) {
+		_ = gsLayer.AnnounceAllSubscriptions(context.Background())
+	})
 
 	// Get listen address
 	listenAddr := ""

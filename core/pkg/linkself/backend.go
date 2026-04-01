@@ -72,7 +72,7 @@ func (s *sqliteBackend) storages() backendStorages {
 		deviceStorage:     s.db.DeviceStorage(),
 		sharedStorage:     s.db.SharedStorage(),
 		subscriptionStore: s.db.SubscriptionStore(),
-		networkStore:      network.NewMemStore(), // TODO(phase2.6): replace with s.db.NetworkStore()
+		networkStore:      s.db.NetworkStore(),
 	}
 }
 

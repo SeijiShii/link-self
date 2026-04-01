@@ -27,13 +27,14 @@ const defaultDialTimeout = 30 * time.Second
 
 // Node is a LinkSelf node: identity, libp2p host, DHT, auth handler, and store-forward.
 type Node struct {
-	Identity     *did.Identity
-	Host         host.Host
-	DHT          *kaddht.IpfsDHT
-	StoreForward *storeforward.StoreForward
-	mu           sync.Mutex
-	onMessage    func(peerDID string, payload []byte)
-	router       MessageRouter
+	Identity      *did.Identity
+	Host          host.Host
+	DHT           *kaddht.IpfsDHT
+	StoreForward  *storeforward.StoreForward
+	mu            sync.Mutex
+	onMessage     func(peerDID string, payload []byte)
+	router        MessageRouter
+	onAuthSuccess func(peerDID string) // called after successful auth (both sides)
 }
 
 // Config holds options for creating a Node.
@@ -93,6 +94,9 @@ func (n *Node) Start(ctx context.Context) error {
 		if pub := n.Host.Peerstore().PubKey(remoteID); pub != nil {
 			if peerDID, err := did.PubKeyToDID(pub); err == nil {
 				_, _ = n.StoreForward.FlushForDID(peerDID, remoteID, n.sendMessageToPeer)
+				if n.onAuthSuccess != nil {
+					n.onAuthSuccess(peerDID)
+				}
 			}
 		}
 	})
@@ -161,6 +165,13 @@ func (n *Node) SetOnSubAnnounce(fn func(peerDID string, payload []byte)) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.router.OnSubAnnounce = fn
+}
+
+// SetOnAuthSuccess sets a callback invoked after successful authentication (both incoming and outgoing).
+func (n *Node) SetOnAuthSuccess(fn func(peerDID string)) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.onAuthSuccess = fn
 }
 
 // SendToPeerID sends a raw payload directly to a peer by their transport PeerID.
@@ -248,6 +259,9 @@ func (n *Node) connectToAddr(ctx context.Context, peerDID string, info peer.Addr
 		return nil, fmt.Errorf("auth: %w", err)
 	}
 	_, _ = n.StoreForward.FlushForDID(peerDID, info.ID, n.sendMessageToPeer)
+	if n.onAuthSuccess != nil {
+		n.onAuthSuccess(peerDID)
+	}
 	return stream, nil
 }
 

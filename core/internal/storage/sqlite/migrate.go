@@ -3,7 +3,7 @@ package sqlite
 import "fmt"
 
 // schemaVersion is the current schema version.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // migrations maps from version → DDL that upgrades TO that version.
 var migrations = map[int]string{
@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     channel TEXT NOT NULL,
     topics  TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (did, channel)
+);
+`,
+	2: `
+CREATE TABLE IF NOT EXISTS networks (
+    id           TEXT PRIMARY KEY,
+    suite_id     TEXT NOT NULL DEFAULT '',
+    members      TEXT NOT NULL DEFAULT '[]',
+    member_roles TEXT NOT NULL DEFAULT '{}'
 );
 `,
 }

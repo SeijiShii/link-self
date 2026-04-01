@@ -33,10 +33,14 @@ type Migration struct {
 	SQL     string
 }
 
+// OnWriteFunc is called when a write operation is detected.
+type OnWriteFunc func(entry WriteEntry)
+
 // Proxy wraps a SQLite database and intercepts write operations.
 type Proxy struct {
 	db       *sql.DB
 	WriteLog []WriteEntry // captured writes (for sync engine to consume)
+	OnWrite  OnWriteFunc  // optional callback for each detected write
 }
 
 // Open creates a new Proxy backed by a SQLite database at the given path.
@@ -72,7 +76,11 @@ func (p *Proxy) Exec(ctx context.Context, query string, args ...any) (sql.Result
 		return result, err
 	}
 	if op, ok := detectWrite(query); ok {
-		p.WriteLog = append(p.WriteLog, WriteEntry{Op: op, SQL: query})
+		entry := WriteEntry{Op: op, SQL: query}
+		p.WriteLog = append(p.WriteLog, entry)
+		if p.OnWrite != nil {
+			p.OnWrite(entry)
+		}
 	}
 	return result, nil
 }

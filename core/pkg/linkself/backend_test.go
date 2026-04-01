@@ -253,7 +253,6 @@ func TestMemoryBackend_PutGet(t *testing.T) {
 // TestSQLiteBackend_GroupSurvivesRestart: Groups created with SQLiteBackend persist
 // across client restart.
 func TestSQLiteBackend_GroupSurvivesRestart(t *testing.T) {
-	t.Skip("TODO: SQLite network.Store not yet implemented; network data uses MemStore")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
