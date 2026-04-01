@@ -122,6 +122,54 @@ func DIDToPeerID(did string) (peer.ID, error) {
 	return peer.IDFromPublicKey(pub)
 }
 
+// UserIdentity holds the user-level key pair. This key is shared across all
+// devices belonging to the same user and is the DID visible to the network.
+type UserIdentity struct {
+	Identity // embeds PrivKey, PubKey, DID
+}
+
+// DeviceIdentity holds a device-specific key pair. Each device generates its own.
+// This DID is used only for pairing and is never exposed to the network.
+type DeviceIdentity struct {
+	Identity // embeds PrivKey, PubKey, DID
+}
+
+// GenerateUserIdentity creates a new user-level Ed25519 identity.
+func GenerateUserIdentity() (*UserIdentity, error) {
+	id, err := Generate()
+	if err != nil {
+		return nil, err
+	}
+	return &UserIdentity{Identity: *id}, nil
+}
+
+// GenerateDeviceIdentity creates a new device-specific Ed25519 identity.
+func GenerateDeviceIdentity() (*DeviceIdentity, error) {
+	id, err := Generate()
+	if err != nil {
+		return nil, err
+	}
+	return &DeviceIdentity{Identity: *id}, nil
+}
+
+// ExportPrivKey serializes the private key for transfer (e.g. during pairing).
+func (u *UserIdentity) ExportPrivKey() ([]byte, error) {
+	return crypto.MarshalPrivateKey(u.PrivKey)
+}
+
+// ImportUserIdentity reconstructs a UserIdentity from an exported private key.
+func ImportUserIdentity(data []byte) (*UserIdentity, error) {
+	priv, err := crypto.UnmarshalPrivateKey(data)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal private key: %w", err)
+	}
+	id, err := FromPrivKey(priv)
+	if err != nil {
+		return nil, err
+	}
+	return &UserIdentity{Identity: *id}, nil
+}
+
 // DIDToPeerIDKey returns a stable byte key for DHT (SHA256 of DID string).
 // Used as the DHT key for Provide/Find so that DID lookup is deterministic.
 func DIDToPeerIDKey(did string) []byte {

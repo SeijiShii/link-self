@@ -124,6 +124,60 @@ func TestDIDToPeerID(t *testing.T) {
 	}
 }
 
+func TestGenerateUserIdentity(t *testing.T) {
+	uid, err := GenerateUserIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uid.DID == "" {
+		t.Fatal("UserIdentity DID should not be empty")
+	}
+	if !strings.HasPrefix(uid.DID, Prefix) {
+		t.Errorf("UserIdentity DID should start with %q", Prefix)
+	}
+}
+
+func TestGenerateDeviceIdentity(t *testing.T) {
+	did, err := GenerateDeviceIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if did.DID == "" {
+		t.Fatal("DeviceIdentity DID should not be empty")
+	}
+	if !strings.HasPrefix(did.DID, Prefix) {
+		t.Errorf("DeviceIdentity DID should start with %q", Prefix)
+	}
+}
+
+func TestUserAndDeviceDID_AreDifferent(t *testing.T) {
+	uid, _ := GenerateUserIdentity()
+	did, _ := GenerateDeviceIdentity()
+	if uid.DID == did.DID {
+		t.Error("User and Device DID should be different")
+	}
+}
+
+func TestExportUserKey(t *testing.T) {
+	uid, _ := GenerateUserIdentity()
+	data, err := uid.ExportPrivKey()
+	if err != nil {
+		t.Fatalf("ExportPrivKey: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("exported key should not be empty")
+	}
+
+	// Import and verify same DID
+	uid2, err := ImportUserIdentity(data)
+	if err != nil {
+		t.Fatalf("ImportUserIdentity: %v", err)
+	}
+	if uid2.DID != uid.DID {
+		t.Errorf("imported DID = %q, want %q", uid2.DID, uid.DID)
+	}
+}
+
 func TestDIDToPeerID_Invalid(t *testing.T) {
 	_, err := DIDToPeerID("not-a-did")
 	if err == nil {
