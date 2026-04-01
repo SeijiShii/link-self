@@ -373,39 +373,141 @@ go test ./test/integration/... -v -timeout 120s
 
 ---
 
-## Phase Dependencies
+## Phase 7: API 統合（MyDB を唯一の公開 API に）
+
+> **追加（2026-04）:** [data-sync-concept.md §15](chat-client/docs/wants/data-sync-concept.md) の設計変更を反映。
+
+**目的:** `DB()` と `SharedDB()` を廃止し、`MyDB()` を唯一の公開 API に統合。SQL 対応。
+**依存:** Phase 6 完了
+
+### 変更概要
+
+| 変更 | 詳細 |
+|------|------|
+| DB() 廃止 | `client.DB()` を削除。SQL 機能は MyDB に統合 |
+| SharedDB() 廃止 | `client.SharedDB()` を削除。groupshare は内部メカニズムとして残す |
+| MyDB に SQL 統合 | `MyDB.Exec()`, `MyDB.Query()`, `MyDB.Migrate()` を追加 |
+| 同期スコープ設定 | `MyDB.SetSyncScope(table, scope, networkID)` を追加 |
+| 昇格オプション | `SetSyncScope` に `WithIncludeExisting(bool)` オプション |
+
+### 影響ファイル
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `pkg/linkself/types.go` | Modify | `DB` interface 廃止、`SharedDB` interface 廃止。`MyDB` に Exec/Query/Migrate/SetSyncScope 追加 |
+| `pkg/linkself/client.go` | Modify | `DB()`, `SharedDB()` メソッド削除。`MyDB()` に sqlproxy 統合 |
+| `pkg/linkself/api.go` | Modify | `dbAPI`, `sharedDB` struct 削除。`myDB` に統合 |
+| `cmd/linkself-daemon/main.go` | Modify | `db.*`, `shareddb.*` RPC 廃止。`mydb.exec`, `mydb.query` 等に統合 |
+
+---
+
+## Phase 8: ユーザー鍵 / デバイス鍵の2層構造
+
+> **追加（2026-04）:** [data-sync-concept.md §5.1](chat-client/docs/wants/data-sync-concept.md) の設計変更を反映。
+
+**目的:** 各デバイスに固有鍵を持たせ、ユーザー鍵はペアリングで安全に転送。
+**依存:** Phase 2 完了
+
+### 変更概要
+
+| 変更 | 詳細 |
+|------|------|
+| Identity の2層化 | `UserIdentity`（ユーザー鍵、ネットワーク向け）+ `DeviceIdentity`（デバイス鍵、ペアリング向け） |
+| ペアリング API | `CreatePairingToken()`, `PairWithToken()` を Client に追加 |
+| ペアリングプロトコル | 時間制限トークン → 接続 → ユーザー鍵の暗号化転送 |
+| DeviceSync の前提変更 | 「同一秘密鍵」→「同一ユーザー鍵を共有するペアリング済みデバイス群」 |
+
+### 新規ファイル
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/pairing/pairing.go` | Create | ペアリングプロトコル実装（トークン生成、接続、鍵転送） |
+| `internal/pairing/token.go` | Create | 時間制限トークンの生成・検証 |
+| `internal/pairing/pairing_test.go` | Create | ペアリングフローテスト |
+
+### 影響ファイル
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/did/identity.go` | Modify | UserIdentity / DeviceIdentity の分離 |
+| `internal/node/node.go` | Modify | 認証でユーザー鍵を使用、デバイス鍵はペアリングのみ |
+| `pkg/linkself/types.go` | Modify | `Client` に `CreatePairingToken`, `PairWithToken` 追加 |
+| `pkg/linkself/client.go` | Modify | ペアリング API 実装 |
+
+---
+
+## Phase 9: ChangeLog 保持ポリシー + 全同期フォールバック
+
+> **追加（2026-04）:** [dump-restore-retention.md §11](docs/dump-restore-retention.md) の設計変更を反映。
+
+**目的:** ChangeLog の肥大化防止と、長期オフラインデバイスの自動復帰。
+**依存:** Phase 1 完了
+
+### 変更概要
+
+| 変更 | 詳細 |
+|------|------|
+| ChangeLog 切り捨て | TimeBased（デフォルト30日）/ CountBased（デフォルト10000件） |
+| 最小 seq 追跡 | DeviceStorage に `MinSeq()` を追加 |
+| ギャップ検出 | 要求 seq < MinSeq でフォールバック判定 |
+| 自動全同期 | Dump/Restore を自動実行。権限確認付き |
+
+### 影響ファイル
+
+| File | Operation | Description |
+|------|-----------|-------------|
+| `internal/devicesync/types.go` | Modify | `DeviceStorage` に `MinSeq()`, `TruncateChangeLog()` 追加 |
+| `internal/devicesync/replication.go` | Modify | Put/Delete 時に切り捨て実行。SyncWith でギャップ検出 → 全同期フォールバック |
+| `internal/devicesync/mem_storage.go` | Modify | 切り捨て・MinSeq 実装 |
+| `internal/storage/sqlite/device_storage.go` | Modify | SQLite 版の切り捨て・MinSeq 実装 |
+| `pkg/linkself/types.go` | Modify | `Config` に `ChangeLogRetention` 追加 |
+
+---
+
+## Phase Dependencies（更新版）
 
 ```
 Phase 1 (API Rename + MyDB Dump)
     ↓
 Phase 2 (Network + Role DAG)  ←→  Phase 4 (SubAnnounce + Retention Sync)
-    ↓
-Phase 3 (Storage Auto-Placement)
+    ↓                               ↑
+Phase 3 (Storage Auto-Placement)    Phase 9 (ChangeLog Retention + Full Sync Fallback)
     ↓
 Phase 5 (Permission Model)
     ↓
 Phase 6 (SQL Query Interface)
+    ↓
+Phase 7 (API 統合: MyDB 唯一の公開 API)
+
+Phase 8 (User/Device Key) ← Phase 2 完了後に着手可能
 ```
 
-Phase 4 は Phase 1 のみに依存し、Phase 2-3 と並行実行可能。
+Phase 9 は Phase 1 のみに依存し、早期着手可能。
+Phase 7 は Phase 6 完了が前提。
+Phase 8 は Phase 2 完了後に並行実行可能。
 
 ---
 
-## Risks and Mitigation
+## Risks and Mitigation（更新版）
 
 | Risk | Mitigation |
 |------|------------|
 | Group→Network 移行で既存テスト破損 | 破壊的変更を許容。テストを一括更新。internal/group は internal/network に置換 |
-| SQL プロキシ層の複雑性 | Phase 6 を最後に。それまで Put/Get API が内部で動作し続ける |
+| SQL プロキシ層の複雑性 | Phase 6 を先に完成。Phase 7 で MyDB に統合 |
 | SQLite WAL と複数プロセス同時アクセス | Phase 3 で WAL モード前提。複数プロセス問題は仕様どおり後続検討 |
 | ロール DAG の循環参照 | NewDAG() 構築時にバリデーション。エラーを返す |
 | 差分同期のプロトコル互換性 | 破壊的変更を許容。プロトコルバージョンを上げる |
 | chat-client (Electron) の daemon RPC 呼び出し | RPC メソッド名変更に合わせて chat-client 側も一括更新 |
+| ユーザー鍵のペアリング転送セキュリティ | ECDH + AES-GCM 等の暗号化。時間制限トークンで窓を制限 |
+| ChangeLog 切り捨てと全同期のパフォーマンス | 全同期前に権限確認し、必要テーブルのみ同期。大量データは分割転送 |
+| DB()/SharedDB() 廃止の破壊的変更 | Phase 7 まで既存 API を維持。Phase 7 で一括廃止 |
 
 ---
 
-## Decision References
+## Decision References（更新版）
 
-- [data-sync-concept.md §14](chat-client/docs/wants/data-sync-concept.md) — 全決定事項一覧
+- [data-sync-concept.md §14](chat-client/docs/wants/data-sync-concept.md) — 初回仕様精査の決定事項一覧
+- [data-sync-concept.md §15](chat-client/docs/wants/data-sync-concept.md) — 個人マルチデバイス精査による設計変更（API統合、2層鍵、昇格、ChangeLog保持）
 - [sync-db-plan.md §9](docs/sync-db-plan.md) — 用語の進化 + オーナー→ロール DAG
 - [dump-restore-retention.md §8-10](docs/dump-restore-retention.md) — MyDB Dump, Retention Sync, 保留キュー
+- [dump-restore-retention.md §11](docs/dump-restore-retention.md) — ChangeLog 保持ポリシー + 全同期フォールバック

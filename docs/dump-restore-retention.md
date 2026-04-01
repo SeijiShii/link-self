@@ -154,7 +154,9 @@ func (l *GroupShareLayer) Purge(ctx context.Context, channel string) (int, error
 
 ## 4. 公開 API（pkg/linkself）
 
-### 4.1 GroupShareAPI インターフェース
+### 4.1 GroupShareAPI インターフェース（内部メカニズム）
+
+> **注意（2026-04）:** GroupShareAPI / SharedDB は公開 API から廃止され、内部メカニズムに格下げされた。アプリは `client.MyDB()` の SQL インターフェースを通じてデータにアクセスする。以下は内部実装の参照用。
 
 ```go
 type GroupShareAPI interface {
@@ -352,3 +354,61 @@ Restore(ctx context.Context, records []*Record) (int, error)
 | 上限 | あり（具体的なサイズは実装時に決定） |
 | 上限超過時 | 古いものから破棄。アプリ更新後に差分同期で再取得 |
 | 適用タイミング | アプリ更新後、マイグレーション適用完了時に保留キューを再処理 |
+
+---
+
+## 11. ChangeLog 保持ポリシー
+
+> **追加（2026-04）:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) §15 の決定事項。
+
+DeviceSync の ChangeLog は無制限に保持すると肥大化する。保持ポリシーを導入し、古いエントリを切り捨てる。
+
+### 11.1 設定
+
+```go
+type ChangeLogRetention struct {
+    Mode     RetentionMode   // TimeBased（デフォルト）| CountBased
+    Duration time.Duration   // TimeBased のデフォルト: 30日
+    MaxCount int             // CountBased のデフォルト: 10000
+}
+```
+
+| 項目 | 仕様 |
+|------|------|
+| 設定単位 | Config レベル（全テーブル共通） |
+| デフォルトモード | TimeBased（30日） |
+| CountBased デフォルト | 10000 件 |
+| 切り捨てタイミング | Put/Delete 時に古いエントリを非同期で削除 |
+| 最小シーケンス番号 | ChangeLog が自身の最小 seq を保持する |
+
+### 11.2 全同期フォールバック
+
+ChangeLog が切り捨てられた結果、差分同期に必要なエントリが不足する場合の自動復帰メカニズム。
+
+#### ギャップ検出
+
+```
+再接続時:
+  デバイスA → デバイスB: 「前回同期 seq=800 まで」
+  デバイスB: ChangeLog 最小 seq=1001
+  800 < 1001 → ギャップあり、差分同期不可
+```
+
+#### 全同期フロー
+
+```
+1. ギャップ検出
+2. ネットワークの最新状態を取得
+   - 自分がまだメンバーか確認
+   - テーブルごとの read 権限を確認
+3. 権限のあるテーブルのみ Dump/Restore を自動実行
+4. シーケンス番号をリセット（最新 seq から再開）
+```
+
+| 項目 | 仕様 |
+|------|------|
+| トリガー | 要求 seq < ChangeLog 最小 seq |
+| 実行 | 自動（アプリへの通知なし） |
+| 権限確認 | メンバーシップ・テーブル権限の最新状態を確認してから実行 |
+| 対象 | 権限のあるテーブルのみ |
+| キックされていた場合 | ネットワークスコープのテーブルは同期しない |

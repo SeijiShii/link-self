@@ -24,10 +24,22 @@ DeviceSync / GroupShare は、この透過的な同期を実現するための**
 
 旧設計（単一 SyncLayer）では、グループメンバー全員にレコードを均一にブロードキャストしていた。しかし「自分のデバイス間」と「グループ内の他ユーザー間」ではデータ共有のセマンティクスが根本的に異なる。
 
-- **自分のデバイス間（同一 DID）**: ローカル DB のように全データが透過的に同期されるべき
+- **自分のデバイス間（同一ユーザー DID）**: ローカル DB のように全データが透過的に同期されるべき
 - **グループ間（異なる DID）**: サーバーサイド API のようにアプリが定義した共有データのみが権限に沿って流れるべき
 
 この方針転換により、旧 `syncdb` パッケージを廃止し、**`devicesync`** + **`groupshare`** の 2 パッケージで置換した。
+
+### 1.3 API 統合方針（2026-04）
+
+> **参照:** [データ同期コンセプト §15](../chat-client/docs/wants/data-sync-concept.md)
+
+アプリ向け公開 API は **MyDB に統合**する。MyDB が SQL クエリインターフェース（Exec/Query/Migrate）をサポートし、テーブル単位の同期スコープ設定により DeviceSync / GroupShare を内部で自動的に使い分ける。従来の `DB()` および `SharedDB()` は公開 API から廃止する。
+
+### 1.4 ユーザー鍵 / デバイス鍵の2層構造（2026-04）
+
+> **参照:** [データ同期コンセプト §5.1](../chat-client/docs/wants/data-sync-concept.md)
+
+DeviceSync の「同一 DID = 同一秘密鍵」という前提を改める。各デバイスは固有のデバイス DID を持ち、ネットワークに公開されるユーザー DID は全デバイスで共有する。ペアリングプロトコル（QR + 時間制限トークン）でユーザー鍵を安全に転送する。
 
 ---
 
@@ -45,7 +57,7 @@ DeviceSync / GroupShare は、この透過的な同期を実現するための**
 
 | 項目 | 内容 |
 |------|------|
-| **対象** | 同じ秘密鍵（= 同じ DID）を持つ複数デバイス |
+| **対象** | 同じユーザー DID を共有する複数デバイス（各デバイスは固有のデバイス DID を持つ。§1.4 参照） |
 | **範囲** | アプリが書いた全データ（全テーブル・全レコード） |
 | **同期方式** | 書き込み時即座にブロードキャスト + 接続時の差分同期（ChangeLog ベース） |
 | **競合解決** | last-write-wins（タイムスタンプ） |
@@ -261,11 +273,13 @@ type GroupShareLayer struct {
 
 ## 7. 今後の実装予定
 
-1. **公開 API 拡張** (`pkg/linkself`): `Client` に `MyDB()` / `SharedDB()` / `Network()` を追加（最終的には `DB()` の SQL クエリインターフェースに統合）
+1. **公開 API 統合** (`pkg/linkself`): `MyDB()` を唯一の公開 API に統合（SQL 対応）。`DB()` / `SharedDB()` は廃止
 2. **Node プロトコル分離**: `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0` を追加
-3. **daemon JSON-RPC 拡張**: `mydb.*`, `shareddb.*`, `network.*` メソッド（内部では devicesync / groupshare / group を呼び出す）
+3. **daemon JSON-RPC 拡張**: `mydb.*`, `network.*` メソッド（内部では devicesync / groupshare を呼び出す）
 4. **SQLite 参照実装**: DeviceStorage / SharedStorage の SQLite 実装
 5. **差分同期ハンドシェイク**: DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
+6. **ChangeLog 保持ポリシー**: 時間/件数ベースでの切り捨て + 全同期フォールバック
+7. **ペアリングプロトコル**: ユーザー鍵 / デバイス鍵の2層構造 + QR ペアリング
 
 ---
 
@@ -275,7 +289,8 @@ type GroupShareLayer struct {
 - **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
 - **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
 - **ストレージ**: 全てインターフェース化。ストレージのパスは LinkSelf が DID 空間・SuiteID・ネットワークインスタンスに基づいて自動決定する。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない。アプリはストレージの配置にも実装にも関与しない
-- **公開 API**: 最終的にはアプリ向けに SQL クエリインターフェース（`client.DB().Exec()` / `Query()`）を提供する。現行の Put/Get API は内部実装として残る。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照
+- **公開 API**: `client.MyDB()` が唯一の公開 API。SQL クエリインターフェース（`Exec()` / `Query()`）を提供する。現行の Put/Get は内部実装として残る。詳細は [データ同期コンセプト §15](../chat-client/docs/wants/data-sync-concept.md) を参照
+- **ChangeLog 保持**: 時間ベース（デフォルト30日）/ 件数ベース（デフォルト10000件）で設定可能。不足時は自動全同期にフォールバック（権限確認付き）
 
 ---
 
@@ -283,15 +298,15 @@ type GroupShareLayer struct {
 
 > **参照:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md)
 
-公開 API の名称を以下のように進化させる予定。内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
+公開 API の名称を以下のように進化させる。内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
 
 | 現行（コード上） | 新名称 | 理由 |
 |-----------------|--------|------|
-| DeviceDB | **MyDB** | 実態は「DID に紐づく個人データの全デバイス透過同期」であり、デバイスローカルではない |
-| GroupShare / GroupShareAPI | **SharedDB** | ネットワークメンバー間の共有データストア |
+| DeviceDB + DB | **MyDB** | 唯一の公開 API。SQL 対応。同期スコープはテーブル単位で設定 |
+| GroupShare / GroupShareAPI / SharedDB | 公開 API から廃止 | 内部メカニズムに格下げ。アプリからは見えない |
 | GroupAPI / group パッケージ | **NetworkAPI** | グループ → ネットワーク管理に改名。オーナー概念はロール DAG に吸収（§9.1 参照） |
 
-また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入予定。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入。**ユーザー DID** と **デバイス DID** の2層構造（§1.4）も導入。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
 
 ### 9.1 オーナー概念のロール DAG への吸収
 

@@ -2,6 +2,7 @@
 
 **ステータス:** Phase 1（概念整理）
 **参照:** [sync-db-plan.md](../../../docs/sync-db-plan.md)、[linkself-data-persistence-plan.md](../../../docs/linkself-data-persistence-plan.md)、[group-concept.md](../../../docs/group-concept.md)
+**設計決定記録:** [data-sync-decisions.md](data-sync-decisions.md)
 
 ---
 
@@ -48,8 +49,11 @@ LinkSelf はアプリとストレージの間に立つ**プロキシ**として�
 | アプリ群の識別 | **スイート (Suite)** | 同じスキーマ・ロール定義を共有するアプリ群。SuiteID で識別。開発者がハードコードする |
 | メンバーの集合 + データ空間 | **ネットワーク (Network)** | スイート内の具体的なメンバー集合とデータ空間。ユーザーが実行時に作成する |
 | ネットワークに属する DID | **メンバー (Member)** | ネットワークの参加者。「ユーザー」は LinkSelf 外の文脈で使い、データモデル内では「メンバー」に統一する |
-| 同一 DID 間の透過同期 | **MyDB** | 内部概念。同一 DID の全デバイス・全アプリへの透過同期を担う仕組み |
-| メンバー間の共有同期 | **SharedDB** | 内部概念。ネットワークメンバー間のデータ同期と権限制御を担う仕組み |
+| アプリ向け SQL インターフェース | **MyDB** | アプリが使う唯一の公開 API。SQL クエリを受け付け、テーブルの同期スコープ設定に基づいて自動同期する |
+| 同一 DID 間の透過同期 | **DeviceSync** | 内部メカニズム。同一ユーザーの全デバイスへの透過同期を担う |
+| メンバー間の共有同期 | **SharedDB** | 内部メカニズム。ネットワークメンバー間のデータ同期と権限制御を担う |
+| ユーザーの識別子 | **ユーザー DID** | ネットワークに公開される安定した DID。デバイスが変わっても不変 |
+| デバイスの識別子 | **デバイス DID** | 各デバイス固有の DID。ペアリングにのみ使用し、ネットワークには公開されない |
 
 ### スイートとネットワーク
 
@@ -162,7 +166,7 @@ SuiteID: "jp.example.home-visit-suite"（開発者がハードコード）
 
 ```go
 // テーブル作成
-client.DB().Exec(ctx, `CREATE TABLE IF NOT EXISTS visit_records (
+client.MyDB().Exec(ctx, `CREATE TABLE IF NOT EXISTS visit_records (
     id TEXT PRIMARY KEY,
     patient_id TEXT NOT NULL,
     date TEXT NOT NULL,
@@ -170,11 +174,11 @@ client.DB().Exec(ctx, `CREATE TABLE IF NOT EXISTS visit_records (
 )`)
 
 // データ書き込み（裏側で自動同期される）
-client.DB().Exec(ctx, `INSERT INTO visit_records (id, patient_id, date, body)
+client.MyDB().Exec(ctx, `INSERT INTO visit_records (id, patient_id, date, body)
     VALUES (?, ?, ?, ?)`, id, patientID, date, body)
 
 // リッチなクエリ（WHERE, JOIN, ORDER BY すべて使える）
-rows := client.DB().Query(ctx, `SELECT * FROM visit_records
+rows := client.MyDB().Query(ctx, `SELECT * FROM visit_records
     WHERE patient_id = ? AND date > ?
     ORDER BY date DESC`, patientID, sinceDate)
 ```
@@ -183,9 +187,11 @@ rows := client.DB().Query(ctx, `SELECT * FROM visit_records
 
 ---
 
-## 5. MyDB と SharedDB（内部概念）
+## 5. MyDB（公開 API）と内部同期メカニズム
 
-MyDB と SharedDB はアプリからは見えない**プロキシ内部の同期メカニズム**である。アプリは `client.DB()` という単一のインターフェースを通じてデータにアクセスし、裏側で MyDB / SharedDB が協調して動作する。
+**MyDB はアプリが使う唯一の公開 API** である。アプリは `client.MyDB()` を通じて SQL クエリを発行し、データの同期は LinkSelf が透過的に処理する。
+
+内部では **DeviceSync**（同一ユーザーのデバイス間同期）と **SharedDB**（ネットワークメンバー間同期）が協調して動作するが、アプリからこれらの区分は見えない。同期範囲はテーブル単位の権限設定（§6.5）で自動的に決まる。
 
 ### アプリから見たデータの見え方
 
@@ -217,6 +223,46 @@ LinkSelf プロキシが権限を確認する
 ```
 
 権限と同期範囲の関係は §6.5 を参照。
+
+### 同期スコープの変更（個人→共有への昇格）
+
+テーブルの同期スコープを変更することで、個人データを共有データに昇格できる:
+
+```go
+// 個人メモアプリ → 勉強グループで共有
+client.MyDB().SetSyncScope(ctx, "notes", linkself.ScopeNetwork, networkID,
+    linkself.WithIncludeExisting(true))  // 既存データも共有するか
+```
+
+**推奨パターン:** 個人用アプリから共有アプリへの移行は、テーブルスキーマのマイグレーションと合わせて行い、同期スコープ・ロール・権限を設計し直すこと。気軽なトグルではなく、アプリのバージョンアップとして意識的に行う。
+
+`IncludeExisting` オプション:
+- `true`: スコープ変更時に既存データもネットワークメンバーに同期する
+- `false`（デフォルト）: スコープ変更後の新規書き込みのみ共有対象
+
+### 5.1 ユーザー鍵とデバイス鍵の2層構造
+
+各デバイスは**固有のデバイス鍵（デバイス DID）**を持ち、ネットワークに公開される**ユーザー鍵（ユーザー DID）**は全デバイスで共有する。
+
+```
+ユーザー DID (did:key:USER)  ← ネットワークに公開、不変
+  ├─ スマホ  (did:key:dev1) ← デバイス固有、ペアリングにのみ使用
+  ├─ PC     (did:key:dev2)
+  └─ タブレット (did:key:dev3)
+```
+
+**ペアリングプロトコル:**
+1. 既存デバイスで `CreatePairingToken()` を呼ぶ → 時間制限付きトークン生成
+2. アプリがトークンを QR コード等で表示
+3. 新デバイスでトークンを入力 → 既存デバイスに接続
+4. 既存デバイスがユーザー鍵を暗号化して転送
+5. 新デバイスが同一ユーザーとして動作開始（既存データの全同期を実行）
+
+**設計原則:**
+- ユーザー鍵の転送はペアリング時の1回のみ。以後のデバイス間認証はデバイス鍵で行う
+- ネットワークメンバーからはユーザー DID のみ見える。デバイスの追加・削除は外部に影響しない
+- 1台紛失した場合、他デバイスからそのデバイスのペアリングを解除できる（ユーザー鍵の再生成は不要）
+- 全デバイス同時消失時はユーザー鍵を失い、データは復元不可能
 
 ---
 
@@ -286,7 +332,7 @@ role, _ := client.Network().GetMemberRole(ctx, memberDID)
 
 ```go
 // テーブル作成（標準 SQL）
-client.DB().Exec(ctx, `CREATE TABLE visit_records (
+client.MyDB().Exec(ctx, `CREATE TABLE visit_records (
     id TEXT PRIMARY KEY,
     patient_id TEXT NOT NULL,
     date TEXT NOT NULL,
@@ -294,7 +340,7 @@ client.DB().Exec(ctx, `CREATE TABLE visit_records (
 )`)
 
 // 権限設定（別 API）
-client.DB().SetPermissions(ctx, "visit_records", linkself.Permissions{
+client.MyDB().SetPermissions(ctx, "visit_records", linkself.Permissions{
     Read:   "viewer",   // viewer 以上が読める（nurse, admin も含む）
     Write:  "nurse",    // nurse 以上が書き込み可（admin も含む）
     Delete: "owner",    // 書き込んだ本人のみ削除可
@@ -332,13 +378,14 @@ client.DB().SetPermissions(ctx, "visit_records", linkself.Permissions{
 
 | 現行実装 | コンセプト上の位置づけ |
 |---------|---------------------|
-| DeviceDB / `devicesync` パッケージ | MyDB の同期エンジン（同一 DID 間の透過同期） |
-| GroupShare / `groupshare` パッケージ | SharedDB の同期エンジン（ネットワークメンバー間の同期） |
-| GroupAPI / `group` パッケージ | ネットワーク管理に改名予定 |
+| `devicesync` パッケージ | DeviceSync エンジン（同一ユーザーの全デバイス間の透過同期） |
+| `groupshare` パッケージ | SharedDB エンジン（ネットワークメンバー間の同期）。内部メカニズム |
+| `network` パッケージ | ネットワーク管理（メンバー・ロール） |
+| `sqlproxy` パッケージ | MyDB の公開 API 実装。SQL → ローカル SQLite 実行 → 同期トリガー |
 | ReplicationEngine + ChangeLog | 差分同期・競合解決の内部メカニズム（そのまま維持） |
 | SQLite3 ストレージ実装 | データ永続化（LinkSelf が完全内包） |
 
-アプリからはこれらの内部構造は見えない。アプリは SQL クエリを発行するだけである。
+アプリからはこれらの内部構造は見えない。アプリは `client.MyDB()` で SQL クエリを発行するだけである。
 
 ---
 
@@ -348,11 +395,11 @@ client.DB().SetPermissions(ctx, "visit_records", linkself.Permissions{
 スイート「訪問看護スイート」（SuiteID: jp.example.home-visit-suite）
 └── ネットワーク「東京クリニック」（インスタンス ID: 550e8400-...）
 
-  メンバー田中（DID: did:key:z6Mk...、ロール: nurse）
-    ├── Windows PC — 編集アプリ A
-    ├── Mac — 編集アプリ A
-    ├── iOS — 閲覧アプリ B
-    └── Android — 閲覧アプリ B
+  メンバー田中（ユーザーDID: did:key:z6Mk...、ロール: nurse）
+    ├── Windows PC（デバイスDID: did:key:z6Da...）— 編集アプリ A
+    ├── Mac（デバイスDID: did:key:z6Db...）— 編集アプリ A
+    ├── iOS（デバイスDID: did:key:z6Dc...）— 閲覧アプリ B
+    └── Android（デバイスDID: did:key:z6Dd...）— 閲覧アプリ B
 
   メンバー佐藤（DID: did:key:z6Nk...、ロール: nurse）
     └── Windows PC — 編集アプリ A
@@ -366,7 +413,8 @@ client.DB().SetPermissions(ctx, "visit_records", linkself.Permissions{
 - 佐藤のデバイスにも自動的に同期される
 - 山田は admin ロール（nurse を包含）なので読み書き両方可能
 - **全員が同じ `SELECT * FROM visit_records` で全データにアクセスできる**（ロールの範囲内で）
-- アプリは同期の仕組み（MyDB / SharedDB）を一切意識しない
+- アプリは同期の仕組み（DeviceSync / SharedDB）を一切意識しない
+- 田中の各デバイスは固有のデバイス DID を持つが、ネットワークからはユーザー DID（did:key:z6Mk...）のみが見える
 - 田中が大阪クリニックのネットワークにも所属している場合、アプリ上でインスタンスを切り替えて使う
 
 ---
@@ -402,6 +450,13 @@ type Config struct {
     Roles          RoleDefs         // スイートのロール定義（DAG）。アプリがハードコード
     ListenAddrs    []string
     BootstrapPeers []string
+    ChangeLogRetention *ChangeLogRetention // ChangeLog 保持ポリシー（nil = デフォルト）
+}
+
+type ChangeLogRetention struct {
+    Mode     RetentionMode   // TimeBased（デフォルト）| CountBased
+    Duration time.Duration   // TimeBased のデフォルト: 30日
+    MaxCount int             // CountBased のデフォルト: 10000
 }
 ```
 
@@ -416,12 +471,28 @@ client.Start(ctx, config)
 // 所属するネットワークインスタンス一覧
 instances, _ := client.Network().List(ctx)
 
-// インスタンスを選択（以後の DB 操作はこのインスタンスに対して行われる）
+// インスタンスを選択（以後の MyDB 操作はこのインスタンスに対して行われる）
 client.Network().Select(ctx, instanceID)
 
 // 新規作成
 newID, _ := client.Network().Create(ctx, memberDIDs)
 ```
+
+### デバイスのペアリング
+
+新しいデバイスの追加はペアリング API で行う:
+
+```go
+// 既存デバイスで: ペアリングトークン生成（時間制限付き）
+token, _ := client.CreatePairingToken(ctx, 5 * time.Minute)
+// → token をQRコード等でアプリが表示
+
+// 新デバイスで: トークンを使ってペアリング
+client.PairWithToken(ctx, token)
+// → ユーザー鍵が安全に転送され、以後は同一ユーザーとして同期
+```
+
+ペアリングの詳細は §5.1 を参照。
 
 ---
 
@@ -430,148 +501,21 @@ newID, _ := client.Network().Create(ctx, memberDIDs)
 | Phase | 内容 | スコープ |
 |-------|------|---------|
 | **1** | 用語の決定とドキュメント整備 | 本ドキュメント（コード変更なし） |
-| **2** | API リネーム（GroupAPI→NetworkAPI, DeviceDB→MyDB, GroupShare→SharedDB） | `core/pkg/linkself/` |
+| **2** | API 統合（MyDB を唯一の公開 API に。DB()/SharedDB() 廃止） | `core/pkg/linkself/` |
 | **3** | Config.SuiteID + Roles、ネットワークインスタンス API、ストレージ自動配置 | Config, NetworkAPI |
-| **4** | クエリインターフェースの設計と実装 | 新機能: SQL クエリ受付、スキーマ管理 |
-| **5** | 権限モデルの実装 | テーブル単位の read/write/delete 権限、ロール DAG |
-| **6** | 透過的同期の統合 | MyDB/SharedDB の区分をプロキシ内部に隠蔽 |
+| **4** | MyDB に SQL クエリインターフェース統合（Exec/Query/Migrate） | sqlproxy → DeviceSync 連携 |
+| **5** | 権限モデルの実装 + テーブル同期スコープ設定 | テーブル単位の read/write/delete 権限、ロール DAG |
+| **6** | ユーザー鍵/デバイス鍵の2層構造 + ペアリングプロトコル | ID 管理、デバイス追加フロー |
+| **7** | ChangeLog 保持ポリシー + 自動全同期フォールバック | DeviceSync、差分同期 |
 
 ---
 
-## 12. 設計決定
+## 12. 設計決定・検討事項
 
-以下は検討の結果、決定済みの事項である。
+設計決定の記録、検討事項、仕様精査結果は [data-sync-decisions.md](data-sync-decisions.md) に分離した。
 
-| 項目 | 決定 | 理由 |
-|------|------|------|
-| 同期の単位 | 行 BLOB | 同期レイヤーとクエリレイヤーの責務分離。シンプル |
-| 「誰が書いたか」 | LinkSelf が内部メタデータで管理 | アプリのスキーマには含めない。owner 権限判定に使用 |
-| スイートとネットワーク | スイート = アプリ群の識別（静的）、ネットワーク = メンバー集合（動的）。2層に分離 | 1 DID が複数ネットワークに所属するケースに対応 |
-| テーブルの帰属 | ネットワークインスタンスに紐づく | スキーマはスイートが定義、データはインスタンスごとに分離 |
-| 行レベル権限 | テーブル単位 + アプリ側制御 | LinkSelf はテーブル単位の権限のみ。行レベルはアプリが WHERE で制御 |
-| 複数ロール | 単一ロールのみ | 兼任は DAG で複合ロールを定義して対応 |
-| ストレージパス | LinkSelf が自動決定 | アプリはストレージの配置に関与しない |
-| PRIMARY KEY | 全テーブルに必須 | 同期の行識別に必要。複合主キーも許可 |
-| テーブル権限の定義 | 別 API（`SetPermissions()`） | 標準 SQL + 別メソッド。カスタム SQL パーサー不要 |
-| DB インターフェース | `database/sql` 互換 | Exec/Query/QueryRow のシグネチャを合わせる。Go 開発者に馴染みがある |
-| DELETE の同期 | ChangeLog に OpDelete（トゥームストーン） | トゥームストーンは永久に残す。データサイズは小さい |
-| 初期同期 | ChangeLog 差分再生（seq=0 から） | 通常の同期と同じ仕組みで統一的 |
-
----
-
-## 13. 検討事項
-
-### 13.1 スキーマの同期
-
-テーブル定義（CREATE TABLE）自体をどう同期するか。
-
-**問題:** メンバー A がアプリを更新してスキーマ v2 になったが、メンバー B はまだ v1 のアプリを使っている場合、B のデバイスに v2 のデータが届いても正しく格納できない。
-
-**方針:** スキーマはアプリのバージョンに紐づく。LinkSelf はスキーマ定義をメタデータとして同期し、各デバイスで適用する。
-
-- アプリが `CREATE TABLE` や `ALTER TABLE` を発行すると、LinkSelf はそのスキーマ定義を MyDB の特殊なメタテーブルに記録する
-- メタテーブルは他のデータと同様に同一 DID の全デバイスに同期される
-- 受信側デバイスはスキーマ定義を適用してからデータを受け入れる
-- SharedDB 経由でネットワークメンバーにもスキーマ定義を配信する
-
-**スキーマバージョンの不一致時:**
-- 新しいスキーマを受信した側は自動的にマイグレーションを適用する（§13.2 参照）
-- マイグレーションが適用できない場合、データは保留キューに入れ、アプリ更新後に適用する
-
-### 13.2 マイグレーション
-
-アプリがスキーマを変更した場合の既存データの扱い。
-
-**方針:** マイグレーションはアプリが定義し、LinkSelf が実行・同期する。
-
-- アプリはスキーマ変更時にマイグレーション定義（SQL 文のリスト）を LinkSelf に登録する
-- LinkSelf はマイグレーション定義をバージョン番号付きで保存し、同期する
-- 各デバイスは現在のスキーマバージョンと受信したバージョンを比較し、未適用のマイグレーションを順に実行する
-
-```go
-client.DB().Migrate(ctx, []Migration{
-    {Version: 1, SQL: `CREATE TABLE visit_records (...)`},
-    {Version: 2, SQL: `ALTER TABLE visit_records ADD COLUMN notes TEXT`},
-    {Version: 3, SQL: `CREATE INDEX idx_patient ON visit_records (patient_id)`},
-})
-```
-
-- マイグレーションは**前方のみ**（ロールバックは定義しない）。P2P 環境で全ノードのロールバックを保証することは困難であるため
-- 破壊的変更（カラム削除、型変更）はアプリ側の責任で慎重に行う
-
-### 13.3 クエリの範囲
-
-**方針:** クエリはローカルに同期済みのデータに対してのみ実行する。分散クエリは行わない。
-
-- LinkSelf は全メンバーの共有データをローカルに複製する（§13.5 のスケーラビリティを参照）
-- `SELECT` はローカルの SQLite に対して実行される。ネットワーク通信は発生しない
-- `JOIN` もローカルテーブル間でのみ実行される
-- データの鮮度はネットワーク状況と同期タイミングに依存する（結果整合性）
-
-**アプリへの影響:**
-- オフライン時もクエリは実行可能（ローカルデータに対して）
-- オンラインに復帰すると未同期のデータが流入し、クエリ結果が更新される
-- アプリはコールバックで新規データの到着を検知できる
-
-### 13.4 競合解決
-
-**方針:** 行単位の last-write-wins を基本とする。カラム単位の競合解決は当面行わない。
-
-- 同一行（同一主キー）を複数メンバーが同時に更新した場合、タイムスタンプが新しい方が勝つ
-- カラム単位のマージ（A が name を変更、B が address を変更 → 両方を採用）は魅力的だが、複雑性が高い
-  - 行全体を BLOB として同期する現行の ReplicationEngine と整合しない
-  - カラム単位の変更追跡は同期データ量を増大させる
-  - 将来的に必要であれば CRDT ベースの拡張を検討する
-
-**アプリ側でできること:**
-- 楽観的ロック（バージョン番号カラムを用いた競合検出）をアプリが実装する
-- 競合検出時にアプリがユーザーに通知し、手動解決を促す
-
-### 13.5 スケーラビリティ
-
-**問題:** 全メンバーの全データをローカルに持つモデルは、データ量が増えると破綻する。
-
-**方針:** LinkSelf の想定ユースケースにおいて、現実的な制約を整理する。
-
-**想定される規模:**
-- ネットワークメンバー数: 数人〜数十人（業務チーム、家族、小規模組織）
-- データ量: 数 MB〜数 GB 程度（テキストデータ中心）
-
-この規模であればローカル全複製は現実的。
-
-**大規模データへの対応（将来的）:**
-- テーブル単位の同期設定: 全テーブルを同期するのではなく、アプリが同期対象テーブルを選択できるようにする
-- 部分同期: 特定の条件（期間、カテゴリ等）に合致するレコードのみを同期する
-- ファイル・メディアは別チャネル: 大きなバイナリデータは LinkSelf の同期対象外とし、参照（URL やハッシュ）のみを同期する
-
-**現時点の判断:** 小〜中規模のネットワーク利用を前提とし、全複製モデルで進める。スケーラビリティの問題が顕在化した時点で部分同期を導入する。
-
----
-
-## 14. 仕様精査による追加決定事項（2026-04）
-
-以下は docs/ 全体の仕様精査（spec-check）により決定された事項である。
-
-| # | 項目 | 決定 | 影響するドキュメント |
-|---|------|------|---------------------|
-| M1 | ディレクトリ構造 | `suites/<suite-id>/networks/<instance-id>/` が正。linkself-data-persistence-plan を本ドキュメントに合わせて更新済み | linkself-data-persistence-plan.md |
-| M2 | アプリ向け API | SQL クエリインターフェースが最終目標。Put/Get は内部実装として残る | sync-db-plan.md |
-| M3 | Config.StorageConfig | 廃止。ストレージパスは LinkSelf が自動決定 | sync-db-plan.md, linkself-data-persistence-plan.md |
-| M4 | 旧 SyncLayer 参照 | DeviceSync + GroupShare に修正済み | sample-chat-app-plan.md |
-| M5 | RegisterChannel | `opts ...ChannelOption` 付きが正 | topic-subscription-filtering.md |
-| G1 | Retention と再同期 | 差分同期ハンドシェイクで Retention 情報を伝達、送信側で期限切れレコードをスキップ | dump-restore-retention.md |
-| G2 | SubAnnouncement 再接続 | 接続確立時（認証完了後）に SubAnnouncement を自動交換するハンドシェイクを追加 | topic-subscription-filtering.md |
-| G3 | オーナー → ロール DAG | group パッケージのオーナー概念（Owners フィールド）はロール DAG に吸収。キック・招待等の管理操作の権限はスイートのロール定義で決める | group-concept.md, sync-db-plan.md |
-| G4 | MyDB バックアップ | MyDB にも Dump/Restore を追加。全デバイス喪失時の個人データ復元手段 | dump-restore-retention.md |
-| S1 | Channel/Topic → SQL | Channel=テーブル、Topic=カラム値にマッピング。サブスクリプションは `Subscribe(table, filter条件)` に移行 | topic-subscription-filtering.md |
-| S2 | ロール変更の競合 | 行単位 LWW（タイムスタンプ後勝ち）で統一。特別な競合解決は不要 | — |
-| S3 | 保留キュー | 上限あり。超過分は古いものから破棄し、差分同期で再取得 | dump-restore-retention.md |
-| G6 | MyDB の Retention | MyDB に Retention 概念はない。全レコードがダンプ対象 | dump-restore-retention.md |
-| G7 | MyDB Dump のテーブル列挙 | DeviceStorage に `ListTables()` メソッドを追加 | sync-db-plan.md, dump-restore-retention.md |
-| G8 | ネットワーク最低メンバー数 | 最低 1 人（個人用データ空間として許容）。group-concept の「最低 2 人」はネットワーク移行後は適用しない | group-concept.md |
-
-### 未解決事項
-
-| 項目 | 状態 | 備考 |
-|------|------|------|
-| 同一 DID 空間への複数プロセス同時アクセス | Phase 2 で検討 | 複数アプリが同一 DID を使うシナリオの前提条件 |
+主要な決定事項のサマリ:
+- MyDB が唯一の公開 API（SQL 対応）。DB() と SharedDB() は廃止
+- テーブル単位の同期スコープ。read 権限が同期範囲を自動決定
+- ユーザー鍵 + デバイス鍵の2層構造。QR ペアリングでユーザー鍵を転送
+- ChangeLog 保持ポリシー（時間/件数ベース）。不足時は自動全同期
