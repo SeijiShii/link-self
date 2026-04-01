@@ -236,4 +236,4 @@ Old `core/internal/syncdb` to be removed in Phase E.
 - **Timestamp:** Wall-clock milliseconds for last-write-wins. Extensible to logical time (Lamport) if NTP skew becomes an issue
 - **Permissions:** GroupShare AccessPolicy / SchemaValidator are implemented by the app layer. LinkSelf provides only abstract interfaces
 - **Groups:** group package unchanged. Only GroupShare uses it. DeviceSync does not use the group concept
-- **Storage:** All interface-based. The storage backend is selected via `Config.StorageBackend` (`SQLiteBackend(path)` or `MemoryBackend()`). Individual interface injection from outside is not supported (these are internal details of the sync transport). Apps that need rich queries should use their own DB alongside LinkSelf
+- **Storage:** All interface-based. The storage backend is selected via `Config.StorageConfig` (`SQLiteBackend(path)` or `MemoryBackend()`). Individual interface injection from outside is not supported (these are internal details of the sync transport). Apps that need rich queries should use their own DB alongside LinkSelf

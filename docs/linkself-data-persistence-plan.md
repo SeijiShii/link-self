@@ -32,15 +32,18 @@
 
 ---
 
-## 3. 保存構造：LinkSelf データ > DID 空間 > アプリごとのデータ
+## 3. 保存構造：LinkSelf データ > DID 空間 > ネットワーク / アプリごとのデータ
 
-LinkSelf が管理するデータは、次の **3 階層** で配置する。Windows では AppData などプラットフォーム標準のユーザーデータディレクトリを LinkSelf データルートとする。
+> **注意（2026-04）:** NetworkID の概念を導入。同期データ（MyDB / SharedDB）は NetworkID 単位で分離する。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+
+LinkSelf が管理するデータは、次の階層で配置する。Windows では AppData などプラットフォーム標準のユーザーデータディレクトリを LinkSelf データルートとする。
 
 | 階層 | 説明 | 例（パス） |
 |------|------|-------------|
 | **LinkSelf データ** | デバイス上の LinkSelf ルート。環境変数で上書き可。 | `%LOCALAPPDATA%\LinkSelf`（Windows）など |
 | **DID 空間** | 実存（DID）ごとのディレクトリ。1 実存＝1 ディレクトリ。 | `LinkSelf/<DID>/`（DID はファイル名安全な表現に変換） |
-| **アプリごとのデータ** | その DID でそのアプリが使うデータ。DID 空間の下にアプリIDで分離。アプリID は初期化時にアプリが渡す。 | `LinkSelf/<DID>/apps/<app-id>/`（app-id は例: `com.example.chat-client`） |
+| **ネットワーク** | 同期データのスコープ。同じ NetworkID を持つ異なるアプリはデータを共有する。 | `LinkSelf/<DID>/networks/<network-id>/` |
+| **アプリごとのデータ** | アプリ固有の設定・キャッシュ。将来的拡張用。 | `LinkSelf/<DID>/apps/<app-id>/`（app-id は例: `com.example.chat-client`） |
 
 **プラットフォーム別 LinkSelf データルート（案）:**
 
@@ -50,8 +53,9 @@ LinkSelf が管理するデータは、次の **3 階層** で配置する。Win
 | **macOS** | `~/Library/Application Support/LinkSelf` |
 | **Linux** | `~/.local/share/link-self` または `$XDG_DATA_HOME/link-self` |
 
-- **DID 空間の下**に、LinkSelf が管理する **identity（鍵素材）、contacts、friend_requests、groups、sync.db** を置く。同一 DID を選んだアプリは同じ「つながり」を参照する。
-- **アプリごとのデータ**は、その DID でそのアプリが使う設定やキャッシュなど。DID 空間の下に **アプリID ごとのフォルダ** で分離する。Android のパッケージ名のように、アプリ間で衝突しない **安全なアプリID** が必要となる。**LinkSelf を利用するアプリ側が、sync-db などにアクセスするとき（ライブラリ／daemon のインスタンスを初期化するとき）にアプリID を渡す**ことに任せる。LinkSelf は中央で ID を発行せず、アプリが一意な ID（例: 逆ドメイン `com.example.chat-client`）を選ぶ責任を持つ。
+- **DID 空間の下**に、LinkSelf が管理する **identity（鍵素材）、contacts、friend_requests、groups** を置く。同一 DID を選んだアプリは同じ「つながり」を参照する。
+- **ネットワーク（`networks/<network-id>/`）** の下に、同期データ（MyDB / SharedDB）を配置する。同じ NetworkID を持つ異なるアプリ（例: 編集アプリと閲覧アプリ）はデータを共有する。NetworkID はアプリ開発者が生成する UUID。
+- **アプリごとのデータ（`apps/<app-id>/`）** はアプリ固有の設定・キャッシュ用。現時点では同期データが NetworkID 単位のため AppID の役割は薄いが、将来的拡張のため概念として残す。
 
 ---
 
@@ -106,16 +110,16 @@ flowchart TB
 - **チャットクライアント**は、contacts / friend_requests / groups を自前の userData には持たず、**利用する DID とアプリID を指定して** LinkSelf の API（daemon の RPC）を呼ぶ。daemon は指定された DID の空間と、その下の `apps/<app-id>/` だけを読み書きする。
 - 複数インスタンス起動時は、**起動引数や UI で DID を選択**し、選んだ DID に紐づくデータでライブラリを利用する。
 
-### 5.5 データ同期の二層構造（DeviceSync / GroupShare）
+### 5.5 データ同期とストレージ
 
-> **注意（2026-03）:** 旧 sync-db（単一 SyncLayer）は **DeviceSync / GroupShare 二層アーキテクチャ** に移行した。詳細は [sync-db-plan.md](sync-db-plan.md) を参照。
+> **注意（2026-04）:** 詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) および [sync-db-plan.md](sync-db-plan.md) を参照。
 
-**DeviceDB / GroupShare は「同期トランスポート層」** であり、アプリの汎用 DB ではない。body の中身は LinkSelf にとって不透明な BLOB であり、body 内フィールドでの検索や JOIN は提供しない。アプリがリッチなクエリを必要とする場合は、同期データをアプリ側の独自 DB に反映し、そちらでクエリを実行する構成が推奨される。
+LinkSelf はアプリから見た**ストレージそのもの**として機能する。アプリは SQL クエリを発行するだけで、同期・永続化・競合解決は LinkSelf が透過的に処理する。
 
-- **DeviceSync（同一 DID 間）**: DID 空間内の全データ（contacts、messages、アプリデータ等）を同一 DID の全デバイス間で**透過的に全同期**する。アプリは同期を意識しない。`DeviceDB.Put("contacts", id, body)` のようにローカル DB として使うと、自動的に他デバイスに複製される。
-- **GroupShare（異なる DID 間）**: アプリが **Channel**（名前・スキーマ・権限）を定義し、**アプリが選んだ共有データのみ**をグループメンバーに送る。サーバーサイド API のように振る舞う。`AccessPolicy` / `SchemaValidator` はアプリが実装する。
-- **ストレージ**: 各 DID 空間内に DeviceStorage（全データ + ChangeLog）と SharedStorage（共有レコード）を配置。ストレージバックエンドは `Config.StorageBackend` で選択する（`SQLiteBackend(path)` または `MemoryBackend()`）。個別インターフェースの外部注入は行わない（同期トランスポートの内部詳細であるため）。
-- **アプリID**: アプリごとのデータは DID 空間内 `apps/<app-id>/` に分離。GroupShare の Channel 登録時にもアプリID で名前空間を分けることが可能。
+- **MyDB（同一 DID 間）**: DID 空間内の全データを同一 DID の全デバイス間で透過的に同期する。アプリは同期を意識しない
+- **SharedDB（異なる DID 間）**: グループメンバー間で共有されるデータ。権限に基づいてアクセスが制御される
+- **ストレージ**: データストア実装（SQLite3）は LinkSelf が完全に内包する。`Config.StorageConfig` は保存場所の指定であり、実装の注入ではない
+- **NetworkID**: 同期データは NetworkID 単位で分離。同じ NetworkID を持つ異なるアプリはデータを共有する
 
 ---
 

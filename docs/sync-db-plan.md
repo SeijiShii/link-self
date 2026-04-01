@@ -8,20 +8,17 @@
 
 ## 1. 背景と方針転換
 
-### 1.1 同期トランスポートとしての位置づけ
+### 1.1 ストレージプロキシとしての位置づけ
 
-**DeviceDB / GroupShare は「同期トランスポート層」であり、アプリの汎用 DB ではない。** LinkSelf のストレージ（`device_records`, `shared_records`, `change_log`）は、デバイス間・ユーザー間のデータ同期を実現するためのトランスポート層である。
+> **注意（2026-04）:** 本セクションはストレージプロキシモデルに基づいて更新された。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
 
-- **提供するもの:** 論理名前空間（`table`, `channel`）、レコード単位の CRUD、last-write-wins による自動競合解決、ChangeLog ベースの差分同期
-- **提供しないもの:** body 内フィールドでの検索・フィルタリング、テーブル間 JOIN、アプリ固有のスキーマ制約・インデックス
-
-アプリがリッチなクエリ（WHERE 条件、JOIN、全文検索等）を必要とする場合は、LinkSelf の同期データをアプリ側の独自 DB に反映し、そちらでクエリを実行する構成が推奨される。LinkSelf は同期の責務を担い、クエリの責務はアプリが担う。
+LinkSelf はアプリから見た**ストレージそのもの**として機能する。アプリは SQL クエリを発行するだけで、データの同期・永続化・競合解決はすべて LinkSelf が透過的に処理する。
 
 ```
-アプリ層:    アプリ独自 DB ← リッチなクエリ（WHERE, JOIN, INDEX）
-               ↑ 受信データを反映
-LinkSelf層:  DeviceDB / GroupShare ← 同期トランスポート（table + id + body）
+アプリ → LinkSelf（SQL クエリ受付・データ返却・同期は透過的）
 ```
+
+DeviceSync / GroupShare は、この透過的な同期を実現するための**内部メカニズム**である。
 
 ### 1.2 旧設計からの転換
 
@@ -277,4 +274,19 @@ type GroupShareLayer struct {
 - **タイムスタンプ**: 実時刻（ミリ秒）で後勝ち。NTP ずれが問題になる場合は論理時刻（Lamport 等）への拡張を検討
 - **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
 - **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
-- **ストレージ**: 全てインターフェース化。ストレージバックエンドは `Config.StorageBackend` で選択する（`SQLiteBackend(path)` または `MemoryBackend()`）。個別インターフェースの外部注入は行わない（同期トランスポートの内部詳細であるため）。アプリがリッチなクエリを必要とする場合はアプリ側 DB を併用する
+- **ストレージ**: 全てインターフェース化。ストレージバックエンドは `Config.StorageConfig` で選択する（`SQLiteBackend(path)` または `MemoryBackend()`）。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない
+
+---
+
+## 9. 用語の進化（2026-04）
+
+> **参照:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md)
+
+公開 API の名称を以下のように進化させる予定。内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
+
+| 現行（コード上） | 新名称 | 理由 |
+|-----------------|--------|------|
+| DeviceDB | **MyDB** | 実態は「DID に紐づく個人データの全デバイス透過同期」であり、デバイスローカルではない |
+| GroupShare / GroupShareAPI | **SharedDB** | グループメンバー間の共有データストア |
+
+また、複数アプリが同じデータ空間を共有するための **NetworkID** 概念を導入予定。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
