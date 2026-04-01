@@ -41,6 +41,24 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/role"
 )
 
+// RetentionMode selects how ChangeLog entries are retained.
+type RetentionMode int
+
+const (
+	// TimeBasedRetention retains entries for a duration (default: 30 days).
+	TimeBasedRetention RetentionMode = iota
+	// CountBasedRetention retains the most recent N entries (default: 10000).
+	CountBasedRetention
+)
+
+// ChangeLogRetention configures ChangeLog pruning policy.
+// Zero value uses TimeBased with 30 days.
+type ChangeLogRetention struct {
+	Mode     RetentionMode
+	Duration time.Duration // for TimeBased (default: 30 days)
+	MaxCount int           // for CountBased (default: 10000)
+}
+
 // Config holds configuration for creating a LinkSelf node.
 //
 // All fields are optional and have sensible defaults:
@@ -98,6 +116,10 @@ type Config struct {
 	// AdminRole is the role name required for network management operations
 	// (add member, kick, set role). Defaults to "admin" if empty.
 	AdminRole string
+
+	// ChangeLogRetention configures ChangeLog pruning policy.
+	// If nil, defaults to TimeBased with 30 days.
+	ChangeLogRetention *ChangeLogRetention
 }
 
 // NodeInfo contains information about a started node.

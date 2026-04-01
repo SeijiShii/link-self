@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 )
 
 // testSendCapture captures all payloads sent to peers.
@@ -257,6 +258,84 @@ func TestReplicationEngine_HandleIncoming_DeleteSkippedIfOlder(t *testing.T) {
 	rec, _ := storage.Get(ctx, "contacts", "alice")
 	if rec == nil {
 		t.Fatal("older Delete should be skipped")
+	}
+}
+
+func TestReplicationEngine_Put_TriggersRetention_CountBased(t *testing.T) {
+	ctx := context.Background()
+	storage := NewMemStorage()
+
+	engine := &ReplicationEngine{
+		Storage: storage,
+		SelfDID: "did:key:zSelf",
+		Retention: &RetentionPolicy{
+			TimeBased: false,
+			MaxCount:  3,
+		},
+	}
+
+	// Write 5 records — should retain only the latest 3
+	for i := 0; i < 5; i++ {
+		engine.Put(ctx, "t", string(rune('a'+i)), []byte("v"))
+	}
+
+	entries, _ := storage.ChangesSince(ctx, 0)
+	if len(entries) > 3 {
+		t.Fatalf("expected at most 3 entries after retention, got %d", len(entries))
+	}
+
+	min, _ := storage.MinSeq(ctx)
+	if min < 3 {
+		t.Fatalf("MinSeq should be >= 3 after truncation, got %d", min)
+	}
+}
+
+func TestReplicationEngine_Put_TriggersRetention_TimeBased(t *testing.T) {
+	ctx := context.Background()
+	storage := NewMemStorage()
+
+	// Manually insert old entries with timestamps far in the past
+	oldTs := time.Now().Add(-48 * time.Hour).UnixMilli()
+	storage.Put(ctx, "t", "old1", []byte("v"), oldTs)
+	storage.Put(ctx, "t", "old2", []byte("v"), oldTs)
+
+	engine := &ReplicationEngine{
+		Storage: storage,
+		SelfDID: "did:key:zSelf",
+		Retention: &RetentionPolicy{
+			TimeBased: true,
+			MaxAge:    24 * time.Hour, // 1 day
+		},
+	}
+
+	// Write a new record — should trigger retention and prune old entries
+	engine.Put(ctx, "t", "new1", []byte("v"))
+
+	entries, _ := storage.ChangesSince(ctx, 0)
+	// Only the new entry should remain (old ones are > 24h ago)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after time-based retention, got %d", len(entries))
+	}
+}
+
+func TestReplicationEngine_DefaultRetention(t *testing.T) {
+	// Nil Retention should not panic and should not prune
+	ctx := context.Background()
+	storage := NewMemStorage()
+
+	engine := &ReplicationEngine{
+		Storage:   storage,
+		SelfDID:   "did:key:zSelf",
+		Retention: nil,
+	}
+
+	for i := 0; i < 10; i++ {
+		engine.Put(ctx, "t", string(rune('a'+i)), []byte("v"))
+	}
+
+	entries, _ := storage.ChangesSince(ctx, 0)
+	if len(entries) != 10 {
+		t.Fatalf("nil retention should not prune, got %d entries", len(entries))
 	}
 }
 

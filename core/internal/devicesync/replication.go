@@ -6,15 +6,31 @@ import (
 	"time"
 )
 
+// RetentionPolicy configures ChangeLog pruning.
+type RetentionPolicy struct {
+	TimeBased bool          // true = prune by age, false = prune by count
+	MaxAge    time.Duration // for time-based (default: 30 days)
+	MaxCount  int           // for count-based (default: 10000)
+}
+
+// DefaultRetentionPolicy returns the default policy: time-based, 30 days.
+func DefaultRetentionPolicy() *RetentionPolicy {
+	return &RetentionPolicy{
+		TimeBased: true,
+		MaxAge:    30 * 24 * time.Hour,
+	}
+}
+
 // ReplicationEngine provides transparent data replication between devices
 // sharing the same DID. It wraps a DeviceStorage and broadcasts every
 // local write to peer devices. Incoming changes are applied with
 // last-write-wins conflict resolution.
 type ReplicationEngine struct {
-	Storage DeviceStorage
-	Send    SendFunc
-	Peers   PeerProvider
-	SelfDID string
+	Storage   DeviceStorage
+	Send      SendFunc
+	Peers     PeerProvider
+	SelfDID   string
+	Retention *RetentionPolicy
 }
 
 // Put stores a record locally and broadcasts the change to peer devices.
@@ -34,12 +50,60 @@ func (r *ReplicationEngine) Put(ctx context.Context, table, id string, body []by
 		Body:      body,
 	}
 
+	r.enforceRetention(ctx, now)
 	return r.broadcast(ctx, entry)
 }
 
 // Get retrieves a record from local storage.
 func (r *ReplicationEngine) Get(ctx context.Context, table, id string) (*Record, error) {
 	return r.Storage.Get(ctx, table, id)
+}
+
+// enforceRetention prunes old ChangeLog entries based on the retention policy.
+func (r *ReplicationEngine) enforceRetention(ctx context.Context, nowMilli int64) {
+	if r.Retention == nil {
+		return
+	}
+	if r.Retention.TimeBased {
+		maxAge := r.Retention.MaxAge
+		if maxAge == 0 {
+			maxAge = 30 * 24 * time.Hour
+		}
+		cutoff := nowMilli - maxAge.Milliseconds()
+		// Find the first entry newer than cutoff and truncate before it.
+		entries, err := r.Storage.ChangesSince(ctx, 0)
+		if err != nil {
+			return
+		}
+		var minSeq uint64
+		for _, e := range entries {
+			if e.Timestamp >= cutoff {
+				minSeq = e.Seq
+				break
+			}
+		}
+		if minSeq > 0 {
+			_ = r.Storage.TruncateChangeLog(ctx, minSeq)
+		}
+	} else {
+		maxCount := r.Retention.MaxCount
+		if maxCount == 0 {
+			maxCount = 10000
+		}
+		latest, err := r.Storage.LatestSeq(ctx)
+		if err != nil || latest == 0 {
+			return
+		}
+		minSeq, err := r.Storage.MinSeq(ctx)
+		if err != nil || minSeq == 0 {
+			return
+		}
+		total := latest - minSeq + 1
+		if total > uint64(maxCount) {
+			cutSeq := latest - uint64(maxCount) + 1
+			_ = r.Storage.TruncateChangeLog(ctx, cutSeq)
+		}
+	}
 }
 
 // Delete removes a record locally and broadcasts the change to peer devices.
