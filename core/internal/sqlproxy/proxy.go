@@ -33,14 +33,25 @@ type Migration struct {
 	SQL     string
 }
 
-// OnWriteFunc is called when a write operation is detected.
+// OnWriteFunc is called when a write operation is detected (legacy).
 type OnWriteFunc func(entry WriteEntry)
+
+// WriteEvent is a structured write event with table name extracted.
+type WriteEvent struct {
+	Table string  // target table name
+	Op    WriteOp // INSERT, UPDATE, DELETE
+	SQL   string  // original SQL statement
+}
+
+// OnWriteEventFunc is called with structured write events including table name.
+type OnWriteEventFunc func(ctx context.Context, event WriteEvent) error
 
 // Proxy wraps a SQLite database and intercepts write operations.
 type Proxy struct {
-	db       *sql.DB
-	WriteLog []WriteEntry // captured writes (for sync engine to consume)
-	OnWrite  OnWriteFunc  // optional callback for each detected write
+	db           *sql.DB
+	WriteLog     []WriteEntry     // captured writes (for sync engine to consume)
+	OnWrite      OnWriteFunc      // optional legacy callback
+	OnWriteEvent OnWriteEventFunc // optional structured callback with table name
 }
 
 // Open creates a new Proxy backed by a SQLite database at the given path.
@@ -81,6 +92,11 @@ func (p *Proxy) Exec(ctx context.Context, query string, args ...any) (sql.Result
 		if p.OnWrite != nil {
 			p.OnWrite(entry)
 		}
+		if p.OnWriteEvent != nil {
+			table := extractTableName(query, op)
+			event := WriteEvent{Table: table, Op: op, SQL: query}
+			_ = p.OnWriteEvent(ctx, event)
+		}
 	}
 	return result, nil
 }
@@ -114,6 +130,45 @@ func (p *Proxy) Migrate(ctx context.Context, migrations []Migration) error {
 		}
 	}
 	return nil
+}
+
+// extractTableName extracts the target table name from a write SQL statement.
+func extractTableName(query string, op WriteOp) string {
+	// Tokenize by whitespace, handle common SQL patterns:
+	//   INSERT [OR REPLACE] INTO <table> ...
+	//   UPDATE <table> SET ...
+	//   DELETE FROM <table> ...
+	//   REPLACE INTO <table> ...
+	tokens := strings.Fields(query)
+	switch op {
+	case OpInsert:
+		// INSERT INTO <table> or INSERT OR REPLACE INTO <table> or REPLACE INTO <table>
+		for i, tok := range tokens {
+			if strings.EqualFold(tok, "INTO") && i+1 < len(tokens) {
+				return stripQuotes(tokens[i+1])
+			}
+		}
+	case OpUpdate:
+		// UPDATE <table> SET ...
+		if len(tokens) >= 2 {
+			return stripQuotes(tokens[1])
+		}
+	case OpDelete:
+		// DELETE FROM <table> ...
+		for i, tok := range tokens {
+			if strings.EqualFold(tok, "FROM") && i+1 < len(tokens) {
+				return stripQuotes(tokens[i+1])
+			}
+		}
+	}
+	return ""
+}
+
+// stripQuotes removes surrounding quotes and trailing parentheses from a table name.
+func stripQuotes(s string) string {
+	s = strings.TrimRight(s, "(")
+	s = strings.Trim(s, "\"'`[]")
+	return s
 }
 
 // detectWrite checks if a SQL statement is a write operation.

@@ -148,6 +148,107 @@ func TestProxy_Migrate(t *testing.T) {
 	}
 }
 
+func TestProxy_OnWriteCallback_Insert(t *testing.T) {
+	p, cleanup := newTestProxy(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	p.Exec(ctx, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+
+	var got []WriteEvent
+	p.OnWriteEvent = func(ctx context.Context, e WriteEvent) error {
+		got = append(got, e)
+		return nil
+	}
+
+	p.Exec(ctx, `INSERT INTO notes (id, body) VALUES (?, ?)`, "n1", "hello")
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 WriteEvent, got %d", len(got))
+	}
+	if got[0].Table != "notes" {
+		t.Errorf("Table = %q, want notes", got[0].Table)
+	}
+	if got[0].Op != OpInsert {
+		t.Errorf("Op = %v, want Insert", got[0].Op)
+	}
+}
+
+func TestProxy_OnWriteCallback_Update(t *testing.T) {
+	p, cleanup := newTestProxy(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	p.Exec(ctx, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+	p.Exec(ctx, `INSERT INTO notes (id, body) VALUES (?, ?)`, "n1", "hello")
+
+	var got []WriteEvent
+	p.OnWriteEvent = func(ctx context.Context, e WriteEvent) error {
+		got = append(got, e)
+		return nil
+	}
+
+	p.Exec(ctx, `UPDATE notes SET body = ? WHERE id = ?`, "world", "n1")
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 WriteEvent, got %d", len(got))
+	}
+	if got[0].Table != "notes" {
+		t.Errorf("Table = %q, want notes", got[0].Table)
+	}
+	if got[0].Op != OpUpdate {
+		t.Errorf("Op = %v, want Update", got[0].Op)
+	}
+}
+
+func TestProxy_OnWriteCallback_Delete(t *testing.T) {
+	p, cleanup := newTestProxy(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	p.Exec(ctx, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+	p.Exec(ctx, `INSERT INTO notes (id, body) VALUES (?, ?)`, "n1", "hello")
+
+	var got []WriteEvent
+	p.OnWriteEvent = func(ctx context.Context, e WriteEvent) error {
+		got = append(got, e)
+		return nil
+	}
+
+	p.Exec(ctx, `DELETE FROM notes WHERE id = ?`, "n1")
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 WriteEvent, got %d", len(got))
+	}
+	if got[0].Table != "notes" {
+		t.Errorf("Table = %q, want notes", got[0].Table)
+	}
+	if got[0].Op != OpDelete {
+		t.Errorf("Op = %v, want Delete", got[0].Op)
+	}
+}
+
+func TestProxy_OnWriteCallback_SelectNoFire(t *testing.T) {
+	p, cleanup := newTestProxy(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	p.Exec(ctx, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+	p.Exec(ctx, `INSERT INTO notes (id, body) VALUES (?, ?)`, "n1", "hello")
+
+	var got []WriteEvent
+	p.OnWriteEvent = func(ctx context.Context, e WriteEvent) error {
+		got = append(got, e)
+		return nil
+	}
+
+	p.Query(ctx, `SELECT * FROM notes`)
+
+	if len(got) != 0 {
+		t.Fatalf("expected 0 WriteEvents for SELECT, got %d", len(got))
+	}
+}
+
 // newTestProxy creates an in-memory SQLite proxy for testing.
 func newTestProxy(t *testing.T) (*Proxy, func()) {
 	t.Helper()
