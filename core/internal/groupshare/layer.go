@@ -103,6 +103,28 @@ func (l *GroupShareLayer) broadcastSubAnnouncement(ch *Channel, channel string, 
 	return l.SendSubAnnounce(context.Background(), members, payload)
 }
 
+// AnnounceAllSubscriptions re-broadcasts all local subscriptions to group members.
+// Called after peer reconnection to restore RemoteSubs state on the peer side.
+func (l *GroupShareLayer) AnnounceAllSubscriptions(ctx context.Context) error {
+	if l.LocalSubs == nil {
+		return nil
+	}
+	subs, err := l.LocalSubs.GetAllSubscriptions(l.SelfDID)
+	if err != nil {
+		return err
+	}
+	for channel, topics := range subs {
+		ch, ok := l.channels[channel]
+		if !ok {
+			continue
+		}
+		if err := l.broadcastSubAnnouncement(ch, channel, topics); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // IsExpired returns true if the record has exceeded the channel's retention period.
 // Returns false if the channel has no retention (permanent) or if the channel is unknown.
 func (l *GroupShareLayer) IsExpired(rec *SharedRecord, now int64) bool {

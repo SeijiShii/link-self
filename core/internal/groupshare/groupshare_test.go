@@ -1145,3 +1145,62 @@ func TestLayer_HandleIncoming_ReadDenied(t *testing.T) {
 		t.Fatal("blocked record should not be stored")
 	}
 }
+
+func TestLayer_AnnounceAllSubscriptions(t *testing.T) {
+	storage := NewMemSharedStorage()
+	resolver := &staticMemberResolver{
+		members: map[string][]string{
+			"g1": {"did:key:zBob"},
+			"g2": {"did:key:zBob"},
+		},
+	}
+	capture := &sendCapture{}
+	layer := NewGroupShareLayer(storage, resolver, capture.send, "did:key:zAlice")
+	layer.LocalSubs = NewMemSubscriptionStore()
+	layer.RemoteSubs = NewMemSubscriptionStore()
+	layer.SendSubAnnounce = capture.send
+
+	// Register channels and subscribe
+	layer.RegisterChannel(&Channel{Name: "feed", GroupID: "g1"})
+	layer.RegisterChannel(&Channel{Name: "docs", GroupID: "g2"})
+	layer.Subscribe("feed", []string{"sports", "news"})
+	layer.Subscribe("docs", []string{"*"})
+
+	// Clear captures from Subscribe broadcasts
+	capture.mu.Lock()
+	capture.calls = nil
+	capture.mu.Unlock()
+
+	// AnnounceAllSubscriptions should re-broadcast all subscriptions
+	err := layer.AnnounceAllSubscriptions(context.Background())
+	if err != nil {
+		t.Fatalf("AnnounceAllSubscriptions: %v", err)
+	}
+
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if len(capture.calls) != 2 {
+		t.Fatalf("expected 2 sub announcements, got %d", len(capture.calls))
+	}
+
+	// Verify announcements contain correct data
+	for _, call := range capture.calls {
+		var ann SubAnnouncement
+		if err := json.Unmarshal(call.Payload, &ann); err != nil {
+			t.Fatalf("unmarshal announcement: %v", err)
+		}
+		if ann.DID != "did:key:zAlice" {
+			t.Errorf("announcement DID = %q, want did:key:zAlice", ann.DID)
+		}
+	}
+}
+
+func TestLayer_AnnounceAllSubscriptions_NilLocalSubs(t *testing.T) {
+	storage := NewMemSharedStorage()
+	layer := NewGroupShareLayer(storage, nil, nil, "did:key:zAlice")
+	// LocalSubs is nil — should not panic
+	err := layer.AnnounceAllSubscriptions(context.Background())
+	if err != nil {
+		t.Fatalf("AnnounceAllSubscriptions with nil LocalSubs: %v", err)
+	}
+}
