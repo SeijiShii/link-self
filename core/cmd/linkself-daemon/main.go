@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/SeijiShii/link-self/core/pkg/linkself"
 )
@@ -204,24 +203,6 @@ func handleRequest(req *JSONRPCRequest) {
 		handleMyDBDump(req)
 	case "mydb.restore":
 		handleMyDBRestore(req)
-	case "shareddb.register":
-		handleGroupShareRegister(req)
-	case "shareddb.subscribe":
-		handleGroupShareSubscribe(req)
-	case "shareddb.put":
-		handleGroupSharePut(req)
-	case "shareddb.get":
-		handleGroupShareGet(req)
-	case "shareddb.delete":
-		handleGroupShareDelete(req)
-	case "shareddb.list":
-		handleGroupShareList(req)
-	case "shareddb.dump":
-		handleGroupShareDump(req)
-	case "shareddb.restore":
-		handleGroupShareRestore(req)
-	case "shareddb.purge":
-		handleGroupSharePurge(req)
 	case "network.create":
 		handleGroupsCreate(req)
 	case "network.addMember":
@@ -230,11 +211,11 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGroupsLeave(req)
 	case "network.list":
 		handleGroupsList(req)
-	case "db.exec":
+	case "mydb.exec":
 		handleDBExec(req)
-	case "db.query":
+	case "mydb.query":
 		handleDBQuery(req)
-	case "db.migrate":
+	case "mydb.migrate":
 		handleDBMigrate(req)
 	default:
 		sendError(req.ID, -32601, "Method not found", fmt.Sprintf("Unknown method: %s", req.Method))
@@ -485,156 +466,7 @@ func handleMyDBRestore(req *JSONRPCRequest) {
 	sendResponse(req.ID, map[string]int{"applied": applied})
 }
 
-// --- SharedDB handlers ---
-
-func handleGroupShareSubscribe(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareSubscribeParams
-	if !parseParams(req, &params) {
-		return
-	}
-	if err := linkSelfClient.SharedDB().Subscribe(params.Channel, params.Topics); err != nil {
-		sendError(req.ID, -32000, "groupshare.subscribe failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, nil)
-}
-
-func handleGroupShareRegister(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareRegisterParams
-	if !parseParams(req, &params) {
-		return
-	}
-	var opts []linkself.ChannelOption
-	if params.Retention != "" {
-		d, err := time.ParseDuration(params.Retention)
-		if err != nil {
-			sendError(req.ID, -32602, "invalid retention duration", err.Error())
-			return
-		}
-		opts = append(opts, linkself.WithRetention(d))
-	}
-	if err := linkSelfClient.SharedDB().RegisterChannel(params.Channel, params.GroupID, opts...); err != nil {
-		sendError(req.ID, -32000, "groupshare.register failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, nil)
-}
-
-func handleGroupSharePut(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupSharePutParams
-	if !parseParams(req, &params) {
-		return
-	}
-	if err := linkSelfClient.SharedDB().Put(ctx, params.Channel, params.Topic, params.RecordID, params.Body); err != nil {
-		sendError(req.ID, -32000, "groupshare.put failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, nil)
-}
-
-func handleGroupShareGet(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareGetParams
-	if !parseParams(req, &params) {
-		return
-	}
-	rec, err := linkSelfClient.SharedDB().Get(ctx, params.Channel, params.RecordID)
-	if err != nil {
-		sendError(req.ID, -32000, "groupshare.get failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, rec)
-}
-
-func handleGroupShareDelete(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareDeleteParams
-	if !parseParams(req, &params) {
-		return
-	}
-	if err := linkSelfClient.SharedDB().Delete(ctx, params.Channel, params.Topic, params.RecordID); err != nil {
-		sendError(req.ID, -32000, "groupshare.delete failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, nil)
-}
-
-func handleGroupShareList(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareListParams
-	if !parseParams(req, &params) {
-		return
-	}
-	recs, err := linkSelfClient.SharedDB().List(ctx, params.Channel)
-	if err != nil {
-		sendError(req.ID, -32000, "groupshare.list failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, recs)
-}
-
-func handleGroupShareDump(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareDumpParams
-	if !parseParams(req, &params) {
-		return
-	}
-	recs, err := linkSelfClient.SharedDB().Dump(ctx, params.GroupID)
-	if err != nil {
-		sendError(req.ID, -32000, "groupshare.dump failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, recs)
-}
-
-func handleGroupShareRestore(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupShareRestoreParams
-	if !parseParams(req, &params) {
-		return
-	}
-	applied, err := linkSelfClient.SharedDB().Restore(ctx, params.Records)
-	if err != nil {
-		sendError(req.ID, -32000, "groupshare.restore failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, map[string]int{"applied": applied})
-}
-
-func handleGroupSharePurge(req *JSONRPCRequest) {
-	if !requireClient(req) {
-		return
-	}
-	var params GroupSharePurgeParams
-	if !parseParams(req, &params) {
-		return
-	}
-	purged, err := linkSelfClient.SharedDB().Purge(ctx, params.Channel)
-	if err != nil {
-		sendError(req.ID, -32000, "groupshare.purge failed", err.Error())
-		return
-	}
-	sendResponse(req.ID, map[string]int{"purged": purged})
-}
+// Note: SharedDB RPC handlers removed — SharedDB is no longer a public API.
 
 // --- Groups handlers ---
 
@@ -711,7 +543,7 @@ func handleDBExec(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	result, err := linkSelfClient.DB().Exec(ctx, params.SQL, params.Args...)
+	result, err := linkSelfClient.MyDB().Exec(ctx, params.SQL, params.Args...)
 	if err != nil {
 		sendError(req.ID, -32000, "db.exec failed", err.Error())
 		return
@@ -733,7 +565,7 @@ func handleDBQuery(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	rows, err := linkSelfClient.DB().Query(ctx, params.SQL, params.Args...)
+	rows, err := linkSelfClient.MyDB().Query(ctx, params.SQL, params.Args...)
 	if err != nil {
 		sendError(req.ID, -32000, "db.query failed", err.Error())
 		return
@@ -778,7 +610,7 @@ func handleDBMigrate(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.DB().Migrate(ctx, params.Migrations); err != nil {
+	if err := linkSelfClient.MyDB().Migrate(ctx, params.Migrations); err != nil {
 		sendError(req.ID, -32000, "db.migrate failed", err.Error())
 		return
 	}

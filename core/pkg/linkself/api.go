@@ -9,34 +9,10 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/sqlproxy"
 )
 
-// dbAPI wraps sqlproxy.Proxy to implement DB.
-type dbAPI struct {
-	proxy *sqlproxy.Proxy
-}
-
-func (d *dbAPI) Exec(ctx context.Context, sql string, args ...any) (DBResult, error) {
-	return d.proxy.Exec(ctx, sql, args...)
-}
-
-func (d *dbAPI) Query(ctx context.Context, sql string, args ...any) (DBRows, error) {
-	return d.proxy.Query(ctx, sql, args...)
-}
-
-func (d *dbAPI) QueryRow(ctx context.Context, sql string, args ...any) DBRow {
-	return d.proxy.QueryRow(ctx, sql, args...)
-}
-
-func (d *dbAPI) Migrate(ctx context.Context, migrations []Migration) error {
-	proxyMigrations := make([]sqlproxy.Migration, len(migrations))
-	for i, m := range migrations {
-		proxyMigrations[i] = sqlproxy.Migration{Version: m.Version, SQL: m.SQL}
-	}
-	return d.proxy.Migrate(ctx, proxyMigrations)
-}
-
-// myDB wraps devicesync.ReplicationEngine to implement DeviceDB.
+// myDB wraps devicesync.ReplicationEngine + sqlproxy.Proxy to implement MyDB.
 type myDB struct {
 	engine *devicesync.ReplicationEngine
+	proxy  *sqlproxy.Proxy
 }
 
 func (d *myDB) Put(ctx context.Context, table, recordID string, body []byte) error {
@@ -117,7 +93,27 @@ func (d *myDB) Restore(ctx context.Context, records []*Record) (int, error) {
 	return applied, nil
 }
 
-// sharedDB wraps groupshare.GroupShareLayer to implement SharedDB.
+func (d *myDB) Exec(ctx context.Context, sql string, args ...any) (DBResult, error) {
+	return d.proxy.Exec(ctx, sql, args...)
+}
+
+func (d *myDB) Query(ctx context.Context, sql string, args ...any) (DBRows, error) {
+	return d.proxy.Query(ctx, sql, args...)
+}
+
+func (d *myDB) QueryRow(ctx context.Context, sql string, args ...any) DBRow {
+	return d.proxy.QueryRow(ctx, sql, args...)
+}
+
+func (d *myDB) Migrate(ctx context.Context, migrations []Migration) error {
+	proxyMigrations := make([]sqlproxy.Migration, len(migrations))
+	for i, m := range migrations {
+		proxyMigrations[i] = sqlproxy.Migration{Version: m.Version, SQL: m.SQL}
+	}
+	return d.proxy.Migrate(ctx, proxyMigrations)
+}
+
+// sharedDB wraps groupshare.GroupShareLayer (internal mechanism, not public API).
 type sharedDB struct {
 	layer *groupshare.GroupShareLayer
 }

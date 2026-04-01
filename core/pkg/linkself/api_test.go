@@ -15,13 +15,7 @@ func TestMyDB_NilBeforeStart(t *testing.T) {
 	}
 }
 
-// TestSharedDB_NilBeforeStart: SharedDB() returns nil before Start.
-func TestSharedDB_NilBeforeStart(t *testing.T) {
-	c := NewClient()
-	if c.SharedDB() != nil {
-		t.Error("SharedDB() should return nil before Start")
-	}
-}
+// Note: SharedDB tests removed — SharedDB is no longer a public API.
 
 // TestNetwork_NilBeforeStart: Network() returns nil before Start.
 func TestNetwork_NilBeforeStart(t *testing.T) {
@@ -52,26 +46,6 @@ func TestMyDB_AvailableAfterStart(t *testing.T) {
 	}
 }
 
-// TestSharedDB_AvailableAfterStart: GroupShare() returns non-nil after Start.
-func TestSharedDB_AvailableAfterStart(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	c := NewClient()
-	config := Config{
-		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
-		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
-	}
-	_, err := c.Start(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop(ctx)
-
-	if c.SharedDB() == nil {
-		t.Error("GroupShare() should return non-nil after Start")
-	}
-}
 
 // TestNetwork_AvailableAfterStart: Groups() returns non-nil after Start.
 func TestNetwork_AvailableAfterStart(t *testing.T) {
@@ -264,53 +238,6 @@ func TestNetwork_Leave(t *testing.T) {
 	}
 }
 
-// TestSharedDB_RegisterAndPutGet: Register channel, put, get.
-func TestSharedDB_RegisterAndPutGet(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	c := NewClient()
-	config := Config{
-		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
-		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
-	}
-	_, err := c.Start(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop(ctx)
-
-	groups := c.Network()
-	myDID := c.GetMyDID()
-
-	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
-
-	gs := c.SharedDB()
-	if err := gs.RegisterChannel("notes", groupID); err != nil {
-		t.Fatalf("RegisterChannel: %v", err)
-	}
-
-	if err := gs.Put(ctx, "notes", "", "note1", []byte(`{"text":"hello"}`)); err != nil {
-		t.Fatalf("Put: %v", err)
-	}
-
-	rec, err := gs.Get(ctx, "notes", "note1")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if rec == nil {
-		t.Fatal("Get returned nil")
-	}
-	if string(rec.Body) != `{"text":"hello"}` {
-		t.Errorf("Body = %q", rec.Body)
-	}
-	if rec.DID != myDID {
-		t.Errorf("DID = %q, want %q", rec.DID, myDID)
-	}
-	if rec.Channel != "notes" {
-		t.Errorf("Channel = %q, want notes", rec.Channel)
-	}
-}
 
 // TestNetwork_AddMember: Create a group, then add a member.
 func TestNetwork_AddMember(t *testing.T) {
@@ -337,37 +264,6 @@ func TestNetwork_AddMember(t *testing.T) {
 	}
 }
 
-// TestSharedDB_GetNotFound: Get a non-existent record returns nil.
-func TestSharedDB_GetNotFound(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	c := NewClient()
-	config := Config{
-		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
-		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
-	}
-	_, err := c.Start(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop(ctx)
-
-	groups := c.Network()
-	myDID := c.GetMyDID()
-	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
-
-	gs := c.SharedDB()
-	_ = gs.RegisterChannel("notes", groupID)
-
-	rec, err := gs.Get(ctx, "notes", "nonexistent")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if rec != nil {
-		t.Error("Get should return nil for nonexistent record")
-	}
-}
 
 // TestMyDB_GetNotFound: Get a non-existent record returns nil.
 func TestMyDB_GetNotFound(t *testing.T) {
@@ -395,8 +291,9 @@ func TestMyDB_GetNotFound(t *testing.T) {
 	}
 }
 
-// TestSharedDB_DeleteAndList: Register, put, delete, list.
-func TestSharedDB_DeleteAndList(t *testing.T) {
+
+// TestMyDB_ExecAndQuery: Create table, insert, query via MyDB SQL interface.
+func TestMyDB_ExecAndQuery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -411,58 +308,7 @@ func TestSharedDB_DeleteAndList(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Network()
-	myDID := c.GetMyDID()
-	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
-
-	gs := c.SharedDB()
-	_ = gs.RegisterChannel("notes", groupID)
-	_ = gs.Put(ctx, "notes", "", "n1", []byte(`a`))
-	_ = gs.Put(ctx, "notes", "", "n2", []byte(`b`))
-
-	recs, err := gs.List(ctx, "notes")
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(recs) != 2 {
-		t.Errorf("List returned %d, want 2", len(recs))
-	}
-
-	_ = gs.Delete(ctx, "notes", "", "n1")
-	recs, _ = gs.List(ctx, "notes")
-	if len(recs) != 1 {
-		t.Errorf("List after Delete = %d, want 1", len(recs))
-	}
-}
-
-// TestDB_NilBeforeStart: DB() returns nil before Start.
-func TestDB_NilBeforeStart(t *testing.T) {
-	c := NewClient()
-	if c.DB() != nil {
-		t.Error("DB() should return nil before Start")
-	}
-}
-
-// TestDB_ExecAndQuery: Create table, insert, query via DB interface.
-func TestDB_ExecAndQuery(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	c := NewClient()
-	config := Config{
-		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
-		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
-	}
-	_, err := c.Start(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop(ctx)
-
-	db := c.DB()
-	if db == nil {
-		t.Fatal("DB() returned nil after Start")
-	}
+	db := c.MyDB()
 
 	_, err = db.Exec(ctx, `CREATE TABLE items (id TEXT PRIMARY KEY, name TEXT)`)
 	if err != nil {
@@ -490,8 +336,8 @@ func TestDB_ExecAndQuery(t *testing.T) {
 	}
 }
 
-// TestDB_Migrate: Migrate creates tables across versions.
-func TestDB_Migrate(t *testing.T) {
+// TestMyDB_Migrate: Migrate creates tables across versions.
+func TestMyDB_Migrate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -506,7 +352,7 @@ func TestDB_Migrate(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DB()
+	db := c.MyDB()
 	err = db.Migrate(ctx, []Migration{
 		{Version: 1, SQL: `CREATE TABLE docs (id TEXT PRIMARY KEY, body TEXT)`},
 	})

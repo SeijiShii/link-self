@@ -25,9 +25,7 @@ import (
 type client struct {
 	node           *node.Node
 	identity       *did.Identity
-	db             *dbAPI
 	myDB           *myDB
-	sharedDB       *sharedDB
 	network        *networkAPI
 	storageBackend StorageBackend
 }
@@ -134,15 +132,13 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 			return n.SendToPeerID(ctx, pid, wrapped)
 		},
 	}
-	c.myDB = &myDB{engine: dsEngine}
-
 	// Wire SQL proxy (in-memory for now; Phase 3 will use dataroot paths).
 	proxy, err := sqlproxy.Open(":memory:")
 	if err != nil {
 		n.Close()
 		return nil, fmt.Errorf("open sql proxy: %w", err)
 	}
-	c.db = &dbAPI{proxy: proxy}
+	c.myDB = &myDB{engine: dsEngine, proxy: proxy}
 
 	// Wire Network layer with role DAG.
 	netStore := stores.networkStore
@@ -193,7 +189,8 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		}
 		return n.SendToGroup(ctx, memberDIDs, wrapped)
 	}
-	c.sharedDB = &sharedDB{layer: gsLayer}
+	// GroupShare layer is kept internally for future sync scope integration (Phase C).
+	_ = gsLayer
 
 	// Wire incoming message handlers.
 	n.SetOnGroupShare(func(peerDID string, payload []byte) {
@@ -229,11 +226,10 @@ func (c *client) Stop(ctx context.Context) error {
 		c.node = nil
 		c.identity = nil
 	}
-	if c.db != nil {
-		if err := c.db.proxy.Close(); err != nil && firstErr == nil {
+	if c.myDB != nil && c.myDB.proxy != nil {
+		if err := c.myDB.proxy.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		c.db = nil
 	}
 	if c.storageBackend != nil {
 		if err := c.storageBackend.close(); err != nil && firstErr == nil {
@@ -293,28 +289,12 @@ func (c *client) SetOnMessage(handler MessageHandler) {
 	}
 }
 
-// DB returns the SQL query interface. Returns nil before Start.
-func (c *client) DB() DB {
-	if c.db == nil {
-		return nil
-	}
-	return c.db
-}
-
-// MyDB returns the MyDB interface. Returns nil before Start.
+// MyDB returns the unified data API (KV + SQL). Returns nil before Start.
 func (c *client) MyDB() MyDB {
 	if c.myDB == nil {
 		return nil
 	}
 	return c.myDB
-}
-
-// SharedDB returns the SharedDB interface. Returns nil before Start.
-func (c *client) SharedDB() SharedDB {
-	if c.sharedDB == nil {
-		return nil
-	}
-	return c.sharedDB
 }
 
 // Network returns the NetworkAPI interface. Returns nil before Start.

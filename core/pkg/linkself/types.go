@@ -297,25 +297,19 @@ type Client interface {
 	// nilで呼び出された場合、メッセージ処理は無効になります。
 	SetOnMessage(handler MessageHandler)
 
-	// DB returns the SQL query interface for the selected network instance.
-	// Returns nil if the node is not started.
-	DB() DB
-
-	// MyDB returns the MyDB interface for private cross-device sync.
+	// MyDB returns the unified data API (KV + SQL).
 	// Returns nil if the node is not started.
 	MyDB() MyDB
-
-	// SharedDB returns the SharedDB interface for group-shared data.
-	// Returns nil if the node is not started.
-	SharedDB() SharedDB
 
 	// Network returns the NetworkAPI for network management.
 	// Returns nil if the node is not started.
 	Network() NetworkAPI
 }
 
-// MyDB provides private data sync across devices sharing the same DID.
-// All writes are automatically replicated to other devices via DeviceSync.
+// MyDB is the unified public API for data access.
+// It provides both KV operations (Put/Get/Delete/List) and SQL operations
+// (Exec/Query/Migrate). All writes are automatically replicated.
+// Sync scope is controlled per-table via permissions (Phase C).
 type MyDB interface {
 	// Put stores a record in the given table. Replicated to all devices.
 	Put(ctx context.Context, table, recordID string, body []byte) error
@@ -335,43 +329,22 @@ type MyDB interface {
 	// Restore applies records using last-write-wins by timestamp.
 	// Returns the number of records actually applied.
 	Restore(ctx context.Context, records []*Record) (int, error)
+
+	// Exec executes a SQL statement (INSERT, UPDATE, DELETE, CREATE TABLE, etc.).
+	Exec(ctx context.Context, sql string, args ...any) (DBResult, error)
+
+	// Query executes a SELECT and returns rows.
+	Query(ctx context.Context, sql string, args ...any) (DBRows, error)
+
+	// QueryRow executes a SELECT returning at most one row.
+	QueryRow(ctx context.Context, sql string, args ...any) DBRow
+
+	// Migrate runs schema migrations in order, skipping already-applied versions.
+	Migrate(ctx context.Context, migrations []Migration) error
 }
 
-// SharedDB provides shared data channels for network members (different DIDs).
-type SharedDB interface {
-	// RegisterChannel registers a named channel bound to a group.
-	// Optional ChannelOption can configure retention, etc.
-	RegisterChannel(name, groupID string, opts ...ChannelOption) error
-
-	// Subscribe declares which topics this device wants for a channel.
-	// ["*"] means all topics, [] means unsubscribe.
-	Subscribe(channel string, topics []string) error
-
-	// Put stores a shared record in a channel. Broadcast to group members.
-	Put(ctx context.Context, channel, topic, recordID string, body []byte) error
-
-	// Get retrieves a shared record by channel and ID. Returns nil, nil if not found.
-	Get(ctx context.Context, channel, recordID string) (*SharedRecord, error)
-
-	// Delete marks a shared record as deleted. Broadcast to group members.
-	Delete(ctx context.Context, channel, topic, recordID string) error
-
-	// List returns all non-expired records in a channel.
-	List(ctx context.Context, channel string) ([]*SharedRecord, error)
-
-	// Dump returns all non-expired shared records for a group across all channels.
-	// The infra layer does not check permissions — the app layer is responsible.
-	Dump(ctx context.Context, groupID string) ([]*SharedRecord, error)
-
-	// Restore applies shared records using last-write-wins by timestamp.
-	// Returns the number of records actually applied.
-	// The infra layer does not check permissions — the app layer is responsible.
-	Restore(ctx context.Context, records []*SharedRecord) (int, error)
-
-	// Purge physically removes expired records from a channel.
-	// Returns the number of records removed.
-	Purge(ctx context.Context, channel string) (int, error)
-}
+// Note: SharedDB has been removed from the public API (Phase B).
+// GroupShare remains as an internal sync mechanism used by MyDB's sync scope.
 
 // channelConfig holds optional channel settings.
 type channelConfig struct {
@@ -405,21 +378,8 @@ type NetworkAPI interface {
 	ListGroups(ctx context.Context) ([]string, error)
 }
 
-// DB provides a SQL query interface for application data.
-// Writes are intercepted and synced transparently.
-type DB interface {
-	// Exec executes a SQL statement (INSERT, UPDATE, DELETE, CREATE TABLE, etc.).
-	Exec(ctx context.Context, sql string, args ...any) (DBResult, error)
-
-	// Query executes a SELECT and returns rows.
-	Query(ctx context.Context, sql string, args ...any) (DBRows, error)
-
-	// QueryRow executes a SELECT returning at most one row.
-	QueryRow(ctx context.Context, sql string, args ...any) DBRow
-
-	// Migrate runs schema migrations in order, skipping already-applied versions.
-	Migrate(ctx context.Context, migrations []Migration) error
-}
+// Note: DB interface has been removed from the public API (Phase B).
+// SQL operations are now part of MyDB.
 
 // DBResult is the result of an Exec operation.
 type DBResult interface {
