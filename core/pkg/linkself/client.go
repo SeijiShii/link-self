@@ -138,7 +138,54 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		n.Close()
 		return nil, fmt.Errorf("open sql proxy: %w", err)
 	}
-	c.myDB = &myDB{engine: dsEngine, proxy: proxy}
+	myDBInst := &myDB{engine: dsEngine, proxy: proxy}
+	c.myDB = myDBInst
+
+	// Wire SQL writes → DeviceSync: when sqlproxy detects a write,
+	// read the affected row back and put it into the ReplicationEngine.
+	proxy.OnWriteEvent = func(ctx context.Context, event sqlproxy.WriteEvent) error {
+		if event.Table == "" || event.Table == "_migrations" {
+			return nil
+		}
+		switch event.Op {
+		case sqlproxy.OpInsert, sqlproxy.OpUpdate:
+			// Read back all rows from the affected table and sync them.
+			// For now, we use a simple approach: query the row by scanning
+			// the table. In future, we'll extract the PK from the SQL.
+			rows, err := proxy.Query(ctx, fmt.Sprintf(
+				`SELECT * FROM "%s"`, event.Table))
+			if err != nil {
+				return nil // best-effort
+			}
+			defer rows.Close()
+			cols, _ := rows.Columns()
+			_ = cols
+			// For each row, serialize as JSON and put into DeviceSync.
+			for rows.Next() {
+				colVals := make([]any, len(cols))
+				colPtrs := make([]any, len(cols))
+				for i := range colVals {
+					colPtrs[i] = &colVals[i]
+				}
+				if err := rows.Scan(colPtrs...); err != nil {
+					continue
+				}
+				// Use first column as record ID (PRIMARY KEY convention).
+				recordID := fmt.Sprintf("%v", colVals[0])
+				rowMap := make(map[string]any)
+				for i, col := range cols {
+					rowMap[col] = colVals[i]
+				}
+				body, _ := json.Marshal(rowMap)
+				_ = dsEngine.Put(ctx, event.Table, recordID, body)
+			}
+		case sqlproxy.OpDelete:
+			// For DELETE, we can't easily know which row was deleted.
+			// We'll rely on the ChangeLog-based approach once we have PK extraction.
+			// For now, skip DELETE sync via SQL.
+		}
+		return nil
+	}
 
 	// Wire Network layer with role DAG.
 	netStore := stores.networkStore

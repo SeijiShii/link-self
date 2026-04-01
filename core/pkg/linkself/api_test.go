@@ -444,6 +444,39 @@ func TestMyDB_SetSyncScope_WithIncludeExisting(t *testing.T) {
 	}
 }
 
+// TestMyDB_SQLWrite_SyncsViaDeviceSync: SQL INSERT triggers DeviceSync replication.
+func TestMyDB_SQLWrite_SyncsViaDeviceSync(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+	db.Exec(ctx, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+	db.Exec(ctx, `INSERT INTO notes (id, body) VALUES (?, ?)`, "n1", "hello")
+
+	// The write should have been captured by the DeviceSync engine's ChangeLog.
+	// Verify via the KV layer (the ReplicationEngine's storage).
+	rec, err := db.Get(ctx, "notes", "n1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	// Note: until C-3 wiring is done, SQL writes won't appear in KV storage.
+	// This test will FAIL (Red) until we connect OnWriteEvent → engine.Put.
+	if rec == nil {
+		t.Fatal("SQL INSERT should be visible via KV Get after sync wiring")
+	}
+}
+
 // TestMyDB_DumpRestore: Dump all records, then restore to a fresh client.
 func TestMyDB_DumpRestore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
