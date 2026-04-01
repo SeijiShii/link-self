@@ -166,7 +166,7 @@ GroupShare データメッセージ（`TypeGroupShare`）とは別のエンベ�
 
 ```go
 type GroupShareAPI interface {
-    RegisterChannel(name, groupID string) error
+    RegisterChannel(name, groupID string, opts ...ChannelOption) error
     Subscribe(channel string, topics []string) error
     Put(ctx context.Context, channel, topic, recordID string, body []byte) error
     Get(ctx context.Context, channel, recordID string) (*SharedRecord, error)
@@ -177,6 +177,7 @@ type GroupShareAPI interface {
 
 - `Put` / `Delete` に `topic` パラメータを追加
 - `Subscribe` メソッドを新規追加
+- 完全な GroupShareAPI（Dump/Restore/Purge 含む）は [dump-restore-retention.md §4.1](dump-restore-retention.md) を参照
 
 ### 6.2 デーモン RPC
 
@@ -242,3 +243,39 @@ MessageRouter
 
 送信側は各メンバーのサブスクリプションを参照し、必要なデータのみを送信する。
 サブスクリプション未登録のメンバーには安全のため全データを送信する。
+
+---
+
+## 10. 再接続時の SubAnnouncement ハンドシェイク
+
+> **追加（2026-04）**
+
+RemoteSubs はインメモリ（揮発）であるため、ピアが切断→再接続すると送信側がそのピアのサブスクリプション情報を失う。これを防ぐため、接続確立時に SubAnnouncement を自動交換するハンドシェイクを追加する。
+
+### フロー
+
+```
+1. ピア A とピア B が接続を確立（認証完了後）
+2. 両者が自身の全 SubAnnouncement を相手に送信
+3. 受信側は RemoteSubs を更新
+```
+
+- 認証完了後のコールバックに組み込む（既存の Store-and-Forward フラッシュと同様のタイミング）
+- LocalSubs の全エントリを SubAnnouncement として送信する
+- 既存の SubAnnouncement 処理（§5.3）をそのまま再利用
+
+---
+
+## 11. SQL インターフェースへの移行（予定）
+
+> **追加（2026-04）:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) の決定事項を反映。
+
+最終的にアプリ向け公開 API は SQL クエリインターフェースに移行する。現行の Channel/Topic ベースのフィルタリングは以下のようにマッピングされる。
+
+| 現行概念 | SQL モデルでの対応 |
+|---------|------------------|
+| Channel | テーブル |
+| Topic | アプリが定義するカラム値（WHERE 句でフィルタ） |
+| `Subscribe(channel, topics)` | `Subscribe(table, filter条件)` |
+
+現行の Put/Get API と Channel/Topic の仕組みは内部実装として残る。

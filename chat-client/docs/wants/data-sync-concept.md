@@ -545,3 +545,33 @@ client.DB().Migrate(ctx, []Migration{
 - ファイル・メディアは別チャネル: 大きなバイナリデータは LinkSelf の同期対象外とし、参照（URL やハッシュ）のみを同期する
 
 **現時点の判断:** 小〜中規模のネットワーク利用を前提とし、全複製モデルで進める。スケーラビリティの問題が顕在化した時点で部分同期を導入する。
+
+---
+
+## 14. 仕様精査による追加決定事項（2026-04）
+
+以下は docs/ 全体の仕様精査（spec-check）により決定された事項である。
+
+| # | 項目 | 決定 | 影響するドキュメント |
+|---|------|------|---------------------|
+| M1 | ディレクトリ構造 | `suites/<suite-id>/networks/<instance-id>/` が正。linkself-data-persistence-plan を本ドキュメントに合わせて更新済み | linkself-data-persistence-plan.md |
+| M2 | アプリ向け API | SQL クエリインターフェースが最終目標。Put/Get は内部実装として残る | sync-db-plan.md |
+| M3 | Config.StorageConfig | 廃止。ストレージパスは LinkSelf が自動決定 | sync-db-plan.md, linkself-data-persistence-plan.md |
+| M4 | 旧 SyncLayer 参照 | DeviceSync + GroupShare に修正済み | sample-chat-app-plan.md |
+| M5 | RegisterChannel | `opts ...ChannelOption` 付きが正 | topic-subscription-filtering.md |
+| G1 | Retention と再同期 | 差分同期ハンドシェイクで Retention 情報を伝達、送信側で期限切れレコードをスキップ | dump-restore-retention.md |
+| G2 | SubAnnouncement 再接続 | 接続確立時（認証完了後）に SubAnnouncement を自動交換するハンドシェイクを追加 | topic-subscription-filtering.md |
+| G3 | オーナー → ロール DAG | group パッケージのオーナー概念（Owners フィールド）はロール DAG に吸収。キック・招待等の管理操作の権限はスイートのロール定義で決める | group-concept.md, sync-db-plan.md |
+| G4 | MyDB バックアップ | MyDB にも Dump/Restore を追加。全デバイス喪失時の個人データ復元手段 | dump-restore-retention.md |
+| S1 | Channel/Topic → SQL | Channel=テーブル、Topic=カラム値にマッピング。サブスクリプションは `Subscribe(table, filter条件)` に移行 | topic-subscription-filtering.md |
+| S2 | ロール変更の競合 | 行単位 LWW（タイムスタンプ後勝ち）で統一。特別な競合解決は不要 | — |
+| S3 | 保留キュー | 上限あり。超過分は古いものから破棄し、差分同期で再取得 | dump-restore-retention.md |
+| G6 | MyDB の Retention | MyDB に Retention 概念はない。全レコードがダンプ対象 | dump-restore-retention.md |
+| G7 | MyDB Dump のテーブル列挙 | DeviceStorage に `ListTables()` メソッドを追加 | sync-db-plan.md, dump-restore-retention.md |
+| G8 | ネットワーク最低メンバー数 | 最低 1 人（個人用データ空間として許容）。group-concept の「最低 2 人」はネットワーク移行後は適用しない | group-concept.md |
+
+### 未解決事項
+
+| 項目 | 状態 | 備考 |
+|------|------|------|
+| 同一 DID 空間への複数プロセス同時アクセス | Phase 2 で検討 | 複数アプリが同一 DID を使うシナリオの前提条件 |

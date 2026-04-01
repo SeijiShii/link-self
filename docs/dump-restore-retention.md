@@ -30,7 +30,7 @@ GroupShare レイヤーに**データダンプ・リストア**と**保存期間
 
 | 項目 | 仕様 |
 |------|------|
-| ダンプ対象 | GroupShare のみ（DeviceDB は対象外） |
+| ダンプ対象 | GroupShare（SharedDB）および MyDB |
 | ダンプ単位 | グループ ID 指定で全チャネル横断 |
 | ダンプ形式 | `[]*SharedRecord` の JSON |
 | 期限切れレコード | ダンプから除外 |
@@ -277,3 +277,78 @@ fmt.Printf("%d records restored\n", applied)
 // クリーンアップ
 {"jsonrpc":"2.0","method":"groupshare.purge","params":{"channel":"messages"},"id":4}
 ```
+
+---
+
+## 8. MyDB の Dump/Restore
+
+> **追加（2026-04）**
+
+MyDB（旧 DeviceDB）にも Dump/Restore を追加する。全デバイス喪失時の個人データ復元手段として必要。
+
+### 8.1 設計
+
+| 項目 | 仕様 |
+|------|------|
+| ダンプ対象 | MyDB の全テーブル・全レコード |
+| ダンプ形式 | `[]*Record` の JSON |
+| リストア競合解決 | LWW（タイムスタンプ後勝ち） |
+| Retention | MyDB に Retention 概念はない（全レコードがダンプ対象） |
+| テーブル列挙 | DeviceStorage に `ListTables(ctx) ([]string, error)` メソッドを追加する必要がある |
+
+### 8.2 API
+
+#### internal 層 (ReplicationEngine)
+
+```go
+func (e *ReplicationEngine) Dump(ctx context.Context) ([]*Record, error)
+func (e *ReplicationEngine) Restore(ctx context.Context, records []*Record) (int, error)
+```
+
+#### 公開 API (DeviceDBAPI / MyDB)
+
+```go
+Dump(ctx context.Context) ([]*Record, error)
+Restore(ctx context.Context, records []*Record) (int, error)
+```
+
+#### デーモン RPC
+
+| メソッド | パラメータ | 戻り値 |
+|----------|------------|--------|
+| `mydb.dump` | なし | `[Record, ...]` |
+| `mydb.restore` | `{"records": [...]}` | `{"applied": N}` |
+
+---
+
+## 9. 差分同期時の Retention 情報伝達
+
+> **追加（2026-04）**
+
+各ノードが独立に Purge を実行するため、ノード間で不要な期限切れレコードの転送が発生しうる。これを防ぐため、差分同期ハンドシェイク時に Retention 情報を伝達する。
+
+### フロー
+
+```
+1. 差分同期ハンドシェイク開始（high-water mark 交換）
+2. 送信側が各チャネルの Retention 情報を伝達
+3. 送信側は期限切れレコード（now >= record.Timestamp + Retention）をスキップして差分を送信
+```
+
+- HandleIncoming での期限切れ拒否は引き続き安全ネットとして機能する
+- Retention 情報がない場合（旧バージョンのピア等）は従来どおり全レコードを送信
+
+---
+
+## 10. スキーマ同期の保留キュー
+
+> **追加（2026-04）:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) §13.1 の補足。
+
+マイグレーションが適用できないデータ（受信側のスキーマバージョンが古い場合）は保留キューに入れる。
+
+| 項目 | 仕様 |
+|------|------|
+| 保留条件 | 受信したデータのスキーマバージョン > ローカルのスキーマバージョン |
+| 上限 | あり（具体的なサイズは実装時に決定） |
+| 上限超過時 | 古いものから破棄。アプリ更新後に差分同期で再取得 |
+| 適用タイミング | アプリ更新後、マイグレーション適用完了時に保留キューを再処理 |

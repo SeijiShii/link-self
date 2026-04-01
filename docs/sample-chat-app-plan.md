@@ -5,20 +5,20 @@
 **概要:** **LinkSelf をインフラとして使用**する 1 本の本格サンプルアプリの設計。グループ/1対1 チャットと P2P ファイル共有を備える。グループ情報・連絡先・同期メタ等は **LinkSelf 側の DB** に保存され、アプリは LinkSelf の API 経由で参照・操作する。
 **参照:** [グループの概念](group-concept.md)、[Phase 1 設計](phase1-design.md)、[データ同期設計（DeviceSync / GroupShare）](sync-db-plan.md)、[ロードマップ](README.ja.md#roadmap)
 
-> **注意（2026-03）:** データ同期は **DeviceSync / GroupShare 二層アーキテクチャ** に移行。旧 SyncLayer は DeviceDB + GroupShare に置き換わる。
+> **注意（2026-03）:** データ同期は **DeviceSync / GroupShare 二層アーキテクチャ** に移行。旧 SyncLayer は DeviceSync + GroupShare に置き換わる。公開 API 名称は MyDB / SharedDB に進化予定。
 
 ---
 
 ## 役割とデータ
 
 - **1 つのアプリ、LinkSelf をインフラとして:** サンプルアプリは **1 本のアプリ** であり、LinkSelf をライブラリとして組み込み、P2P インフラとして利用する。他アプリから LinkSelf を利用する **第一の利用例** となる。
-- **データは LinkSelf 側の DB:** **グループ情報・連絡先・同期メタ** などは **LinkSelf のストア（DB）** に保存される。アプリは LinkSelf の API（例: group.Store、SyncLayer）経由で読み書きする。アプリはグループメンバーシップを独自に持たず、LinkSelf に委ねる。
+- **データは LinkSelf 側の DB:** **ネットワーク情報・連絡先・同期メタ** などは **LinkSelf のストア（DB）** に保存される。アプリは LinkSelf の API（例: NetworkAPI、DeviceSync + GroupShare）経由で読み書きする。アプリはネットワークメンバーシップを独自に持たず、LinkSelf に委ねる。
 
 ---
 
 ## 結論
 
-- **本格サンプルアプリ（チャット＋ファイル共有）**: 実装可能。1 本のアプリがコアの Node API（`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`）および LinkSelf が提供する SyncLayer / RecordStorage を利用する。1 対 1 は **2 人グループ** のケースとして扱う（[グループの概念](group-concept.md) 参照）。
+- **本格サンプルアプリ（チャット＋ファイル共有）**: 実装可能。1 本のアプリがコアの Node API（`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`）および LinkSelf が提供する DeviceSync + GroupShare を利用する。1 対 1 は **2 人ネットワーク** のケースとして扱う（[グループの概念](group-concept.md) 参照）。
 - **1台のPCで複数ノード**: 可能。**1プロセス＝1ノード** とし、同じPCで同じバイナリを複数起動（複数ターミナル）すれば、複数ノードを再現できる。統合テスト [core/test/integration/integration_test.go](../core/test/integration/integration_test.go) がすでに同一ホスト上で複数ノード（別ポート）を立てて DHT・認証・メッセージを検証している。
 
 ---
@@ -66,7 +66,7 @@ flowchart LR
 
 ### ファイル共有（スコープ）
 
-- **スコープ:** P2P ファイル送受信またはグループ内でのファイル共有（共有フォルダ的な同期）。ファイルメタデータ（名前・サイズ・ハッシュ・チャンク ID）は SyncLayer で共有し、実体（チャンク）は別プロトコル（例: Node のストリーム）で送る。詳細（チャンクサイズ・再送・部分取得）は実装時に決定する。
+- **スコープ:** P2P ファイル送受信またはネットワーク内でのファイル共有（共有フォルダ的な同期）。ファイルメタデータ（名前・サイズ・ハッシュ・チャンク ID）は GroupShare で共有し、実体（チャンク）は別プロトコル（例: Node のストリーム）で送る。詳細（チャンクサイズ・再送・部分取得）は実装時に決定する。
 - **追加する機能:** ファイル送信、受信、一覧、削除、オフライン時のチャンクキュー。
 
 ### メッセージ形式

@@ -261,9 +261,9 @@ type GroupShareLayer struct {
 
 ## 7. 今後の実装予定
 
-1. **公開 API 拡張** (`pkg/linkself`): `Client` に `DeviceDB()` / `GroupShare()` / `Groups()` を追加
+1. **公開 API 拡張** (`pkg/linkself`): `Client` に `MyDB()` / `SharedDB()` / `Network()` を追加（最終的には `DB()` の SQL クエリインターフェースに統合）
 2. **Node プロトコル分離**: `/linkself/devicesync/1.0.0`, `/linkself/groupshare/1.0.0` を追加
-3. **daemon JSON-RPC 拡張**: `devicedb.*`, `groupshare.*`, `groups.*` メソッド
+3. **daemon JSON-RPC 拡張**: `mydb.*`, `shareddb.*`, `network.*` メソッド（内部では devicesync / groupshare / group を呼び出す）
 4. **SQLite 参照実装**: DeviceStorage / SharedStorage の SQLite 実装
 5. **差分同期ハンドシェイク**: DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
 
@@ -274,7 +274,8 @@ type GroupShareLayer struct {
 - **タイムスタンプ**: 実時刻（ミリ秒）で後勝ち。NTP ずれが問題になる場合は論理時刻（Lamport 等）への拡張を検討
 - **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
 - **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
-- **ストレージ**: 全てインターフェース化。ストレージバックエンドは `Config.StorageConfig` で選択する（`SQLiteBackend(path)` または `MemoryBackend()`）。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない
+- **ストレージ**: 全てインターフェース化。ストレージのパスは LinkSelf が DID 空間・SuiteID・ネットワークインスタンスに基づいて自動決定する。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない。アプリはストレージの配置にも実装にも関与しない
+- **公開 API**: 最終的にはアプリ向けに SQL クエリインターフェース（`client.DB().Exec()` / `Query()`）を提供する。現行の Put/Get API は内部実装として残る。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照
 
 ---
 
@@ -287,6 +288,15 @@ type GroupShareLayer struct {
 | 現行（コード上） | 新名称 | 理由 |
 |-----------------|--------|------|
 | DeviceDB | **MyDB** | 実態は「DID に紐づく個人データの全デバイス透過同期」であり、デバイスローカルではない |
-| GroupShare / GroupShareAPI | **SharedDB** | グループメンバー間の共有データストア |
+| GroupShare / GroupShareAPI | **SharedDB** | ネットワークメンバー間の共有データストア |
+| GroupAPI / group パッケージ | **NetworkAPI** | グループ → ネットワーク管理に改名。オーナー概念はロール DAG に吸収（§9.1 参照） |
 
-また、複数アプリが同じデータ空間を共有するための **NetworkID** 概念を導入予定。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入予定。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+
+### 9.1 オーナー概念のロール DAG への吸収
+
+[グループの概念](group-concept.md) で定義されていたオーナー（Owners フィールド）は、[データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) のロール DAG に吸収する。
+
+- group パッケージの `Owners []string` フィールドは廃止予定
+- キック・招待等の管理操作の権限は、スイートのロール定義で決める（例: admin ロールのみ）
+- 最後の管理者が脱退した場合の自動昇格も、ロールベースで再設計する
