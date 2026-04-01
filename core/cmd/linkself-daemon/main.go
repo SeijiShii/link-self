@@ -230,6 +230,12 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGroupsLeave(req)
 	case "network.list":
 		handleGroupsList(req)
+	case "db.exec":
+		handleDBExec(req)
+	case "db.query":
+		handleDBQuery(req)
+	case "db.migrate":
+		handleDBMigrate(req)
 	default:
 		sendError(req.ID, -32601, "Method not found", fmt.Sprintf("Unknown method: %s", req.Method))
 	}
@@ -688,6 +694,95 @@ func handleGroupsList(req *JSONRPCRequest) {
 		return
 	}
 	sendResponse(req.ID, groups)
+}
+
+// --- DB handlers ---
+
+type DBExecParams struct {
+	SQL  string        `json:"sql"`
+	Args []interface{} `json:"args,omitempty"`
+}
+
+func handleDBExec(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params DBExecParams
+	if !parseParams(req, &params) {
+		return
+	}
+	result, err := linkSelfClient.DB().Exec(ctx, params.SQL, params.Args...)
+	if err != nil {
+		sendError(req.ID, -32000, "db.exec failed", err.Error())
+		return
+	}
+	rows, _ := result.RowsAffected()
+	sendResponse(req.ID, map[string]int64{"rowsAffected": rows})
+}
+
+type DBQueryParams struct {
+	SQL  string        `json:"sql"`
+	Args []interface{} `json:"args,omitempty"`
+}
+
+func handleDBQuery(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params DBQueryParams
+	if !parseParams(req, &params) {
+		return
+	}
+	rows, err := linkSelfClient.DB().Query(ctx, params.SQL, params.Args...)
+	if err != nil {
+		sendError(req.ID, -32000, "db.query failed", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		sendError(req.ID, -32000, "db.query columns failed", err.Error())
+		return
+	}
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			sendError(req.ID, -32000, "db.query scan failed", err.Error())
+			return
+		}
+		row := make(map[string]interface{}, len(cols))
+		for i, col := range cols {
+			row[col] = vals[i]
+		}
+		results = append(results, row)
+	}
+	sendResponse(req.ID, map[string]interface{}{"columns": cols, "rows": results})
+}
+
+type DBMigrateParams struct {
+	Migrations []linkself.Migration `json:"migrations"`
+}
+
+func handleDBMigrate(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params DBMigrateParams
+	if !parseParams(req, &params) {
+		return
+	}
+	if err := linkSelfClient.DB().Migrate(ctx, params.Migrations); err != nil {
+		sendError(req.ID, -32000, "db.migrate failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, nil)
 }
 
 func sendResponse(id interface{}, result interface{}) {

@@ -275,6 +275,10 @@ type Client interface {
 	// nilで呼び出された場合、メッセージ処理は無効になります。
 	SetOnMessage(handler MessageHandler)
 
+	// DB returns the SQL query interface for the selected network instance.
+	// Returns nil if the node is not started.
+	DB() DB
+
 	// MyDB returns the MyDB interface for private cross-device sync.
 	// Returns nil if the node is not started.
 	MyDB() MyDB
@@ -377,6 +381,47 @@ type NetworkAPI interface {
 
 	// ListGroups returns all group IDs this node belongs to.
 	ListGroups(ctx context.Context) ([]string, error)
+}
+
+// DB provides a SQL query interface for application data.
+// Writes are intercepted and synced transparently.
+type DB interface {
+	// Exec executes a SQL statement (INSERT, UPDATE, DELETE, CREATE TABLE, etc.).
+	Exec(ctx context.Context, sql string, args ...any) (DBResult, error)
+
+	// Query executes a SELECT and returns rows.
+	Query(ctx context.Context, sql string, args ...any) (DBRows, error)
+
+	// QueryRow executes a SELECT returning at most one row.
+	QueryRow(ctx context.Context, sql string, args ...any) DBRow
+
+	// Migrate runs schema migrations in order, skipping already-applied versions.
+	Migrate(ctx context.Context, migrations []Migration) error
+}
+
+// DBResult is the result of an Exec operation.
+type DBResult interface {
+	LastInsertId() (int64, error)
+	RowsAffected() (int64, error)
+}
+
+// DBRows is the result of a Query operation.
+type DBRows interface {
+	Columns() ([]string, error)
+	Next() bool
+	Scan(dest ...any) error
+	Close() error
+}
+
+// DBRow is the result of a QueryRow operation.
+type DBRow interface {
+	Scan(dest ...any) error
+}
+
+// Migration defines a schema migration step.
+type Migration struct {
+	Version int
+	SQL     string
 }
 
 // Record represents a stored item in DeviceDB.

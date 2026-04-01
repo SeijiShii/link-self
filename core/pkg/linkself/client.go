@@ -13,6 +13,7 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
 	"github.com/SeijiShii/link-self/core/internal/network"
 	"github.com/SeijiShii/link-self/core/internal/role"
+	"github.com/SeijiShii/link-self/core/internal/sqlproxy"
 	"github.com/SeijiShii/link-self/core/internal/node"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -24,6 +25,7 @@ import (
 type client struct {
 	node           *node.Node
 	identity       *did.Identity
+	db             *dbAPI
 	myDB           *myDB
 	sharedDB       *sharedDB
 	network        *networkAPI
@@ -134,6 +136,14 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	}
 	c.myDB = &myDB{engine: dsEngine}
 
+	// Wire SQL proxy (in-memory for now; Phase 3 will use dataroot paths).
+	proxy, err := sqlproxy.Open(":memory:")
+	if err != nil {
+		n.Close()
+		return nil, fmt.Errorf("open sql proxy: %w", err)
+	}
+	c.db = &dbAPI{proxy: proxy}
+
 	// Wire Network layer with role DAG.
 	netStore := stores.networkStore
 	var dag *role.DAG
@@ -216,6 +226,12 @@ func (c *client) Stop(ctx context.Context) error {
 		c.node = nil
 		c.identity = nil
 	}
+	if c.db != nil {
+		if err := c.db.proxy.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		c.db = nil
+	}
 	if c.storageBackend != nil {
 		if err := c.storageBackend.close(); err != nil && firstErr == nil {
 			firstErr = err
@@ -272,6 +288,14 @@ func (c *client) SetOnMessage(handler MessageHandler) {
 	if c.node != nil {
 		c.node.SetOnMessage(handler)
 	}
+}
+
+// DB returns the SQL query interface. Returns nil before Start.
+func (c *client) DB() DB {
+	if c.db == nil {
+		return nil
+	}
+	return c.db
 }
 
 // MyDB returns the MyDB interface. Returns nil before Start.

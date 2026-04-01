@@ -6,7 +6,33 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
 	"github.com/SeijiShii/link-self/core/internal/network"
+	"github.com/SeijiShii/link-self/core/internal/sqlproxy"
 )
+
+// dbAPI wraps sqlproxy.Proxy to implement DB.
+type dbAPI struct {
+	proxy *sqlproxy.Proxy
+}
+
+func (d *dbAPI) Exec(ctx context.Context, sql string, args ...any) (DBResult, error) {
+	return d.proxy.Exec(ctx, sql, args...)
+}
+
+func (d *dbAPI) Query(ctx context.Context, sql string, args ...any) (DBRows, error) {
+	return d.proxy.Query(ctx, sql, args...)
+}
+
+func (d *dbAPI) QueryRow(ctx context.Context, sql string, args ...any) DBRow {
+	return d.proxy.QueryRow(ctx, sql, args...)
+}
+
+func (d *dbAPI) Migrate(ctx context.Context, migrations []Migration) error {
+	proxyMigrations := make([]sqlproxy.Migration, len(migrations))
+	for i, m := range migrations {
+		proxyMigrations[i] = sqlproxy.Migration{Version: m.Version, SQL: m.SQL}
+	}
+	return d.proxy.Migrate(ctx, proxyMigrations)
+}
 
 // myDB wraps devicesync.ReplicationEngine to implement DeviceDB.
 type myDB struct {

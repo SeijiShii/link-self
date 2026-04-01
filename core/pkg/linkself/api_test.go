@@ -435,6 +435,91 @@ func TestSharedDB_DeleteAndList(t *testing.T) {
 	}
 }
 
+// TestDB_NilBeforeStart: DB() returns nil before Start.
+func TestDB_NilBeforeStart(t *testing.T) {
+	c := NewClient()
+	if c.DB() != nil {
+		t.Error("DB() should return nil before Start")
+	}
+}
+
+// TestDB_ExecAndQuery: Create table, insert, query via DB interface.
+func TestDB_ExecAndQuery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.DB()
+	if db == nil {
+		t.Fatal("DB() returned nil after Start")
+	}
+
+	_, err = db.Exec(ctx, `CREATE TABLE items (id TEXT PRIMARY KEY, name TEXT)`)
+	if err != nil {
+		t.Fatalf("CREATE TABLE: %v", err)
+	}
+
+	_, err = db.Exec(ctx, `INSERT INTO items (id, name) VALUES (?, ?)`, "1", "Alice")
+	if err != nil {
+		t.Fatalf("INSERT: %v", err)
+	}
+
+	rows, err := db.Query(ctx, `SELECT id, name FROM items`)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		t.Fatal("expected 1 row")
+	}
+	var id, name string
+	rows.Scan(&id, &name)
+	if id != "1" || name != "Alice" {
+		t.Errorf("got (%q, %q), want (1, Alice)", id, name)
+	}
+}
+
+// TestDB_Migrate: Migrate creates tables across versions.
+func TestDB_Migrate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.DB()
+	err = db.Migrate(ctx, []Migration{
+		{Version: 1, SQL: `CREATE TABLE docs (id TEXT PRIMARY KEY, body TEXT)`},
+	})
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	_, err = db.Exec(ctx, `INSERT INTO docs (id, body) VALUES (?, ?)`, "d1", "hello")
+	if err != nil {
+		t.Fatalf("INSERT after Migrate: %v", err)
+	}
+}
+
 // TestMyDB_DumpRestore: Dump all records, then restore to a fresh client.
 func TestMyDB_DumpRestore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
