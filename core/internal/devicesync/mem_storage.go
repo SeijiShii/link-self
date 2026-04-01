@@ -140,3 +140,18 @@ func (m *MemStorage) LatestSeq(_ context.Context) (uint64, error) {
 	defer m.mu.RUnlock()
 	return m.seq, nil
 }
+
+func (m *MemStorage) ListTables(_ context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	seen := make(map[string]bool)
+	for k := range m.records {
+		seen[k.table] = true
+	}
+	tables := make([]string, 0, len(seen))
+	for t := range seen {
+		tables = append(tables, t)
+	}
+	return tables, nil
+}

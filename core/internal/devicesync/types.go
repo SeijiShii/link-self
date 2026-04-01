@@ -63,6 +63,9 @@ type DeviceStorage interface {
 	// LatestSeq returns the highest sequence number in the change log.
 	// Returns 0 if no entries exist.
 	LatestSeq(ctx context.Context) (uint64, error)
+
+	// ListTables returns the names of all tables that contain at least one record.
+	ListTables(ctx context.Context) ([]string, error)
 }
 
 // SendFunc sends a payload to a specific peer (identified by libp2p peer ID or address).

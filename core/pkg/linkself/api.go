@@ -8,16 +8,16 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
 )
 
-// deviceDB wraps devicesync.ReplicationEngine to implement DeviceDB.
-type deviceDB struct {
+// myDB wraps devicesync.ReplicationEngine to implement DeviceDB.
+type myDB struct {
 	engine *devicesync.ReplicationEngine
 }
 
-func (d *deviceDB) Put(ctx context.Context, table, recordID string, body []byte) error {
+func (d *myDB) Put(ctx context.Context, table, recordID string, body []byte) error {
 	return d.engine.Put(ctx, table, recordID, body)
 }
 
-func (d *deviceDB) Get(ctx context.Context, table, recordID string) (*Record, error) {
+func (d *myDB) Get(ctx context.Context, table, recordID string) (*Record, error) {
 	rec, err := d.engine.Get(ctx, table, recordID)
 	if err != nil || rec == nil {
 		return nil, err
@@ -30,11 +30,11 @@ func (d *deviceDB) Get(ctx context.Context, table, recordID string) (*Record, er
 	}, nil
 }
 
-func (d *deviceDB) Delete(ctx context.Context, table, recordID string) error {
+func (d *myDB) Delete(ctx context.Context, table, recordID string) error {
 	return d.engine.Delete(ctx, table, recordID)
 }
 
-func (d *deviceDB) List(ctx context.Context, table string) ([]*Record, error) {
+func (d *myDB) List(ctx context.Context, table string) ([]*Record, error) {
 	recs, err := d.engine.List(ctx, table)
 	if err != nil {
 		return nil, err
@@ -51,12 +51,52 @@ func (d *deviceDB) List(ctx context.Context, table string) ([]*Record, error) {
 	return out, nil
 }
 
-// groupShareAPI wraps groupshare.GroupShareLayer to implement GroupShareAPI.
-type groupShareAPI struct {
+func (d *myDB) Dump(ctx context.Context) ([]*Record, error) {
+	tables, err := d.engine.Storage.ListTables(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []*Record
+	for _, table := range tables {
+		recs, err := d.engine.List(ctx, table)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range recs {
+			out = append(out, &Record{
+				ID:        r.ID,
+				Table:     r.Table,
+				Body:      r.Body,
+				Timestamp: r.Timestamp,
+			})
+		}
+	}
+	return out, nil
+}
+
+func (d *myDB) Restore(ctx context.Context, records []*Record) (int, error) {
+	applied := 0
+	for _, r := range records {
+		existing, err := d.engine.Storage.GetTimestamp(ctx, r.Table, r.ID)
+		if err != nil {
+			return applied, err
+		}
+		if r.Timestamp > existing {
+			if _, err := d.engine.Storage.Put(ctx, r.Table, r.ID, r.Body, r.Timestamp); err != nil {
+				return applied, err
+			}
+			applied++
+		}
+	}
+	return applied, nil
+}
+
+// sharedDB wraps groupshare.GroupShareLayer to implement SharedDB.
+type sharedDB struct {
 	layer *groupshare.GroupShareLayer
 }
 
-func (g *groupShareAPI) RegisterChannel(name, groupID string, opts ...ChannelOption) error {
+func (g *sharedDB) RegisterChannel(name, groupID string, opts ...ChannelOption) error {
 	var cfg channelConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -68,15 +108,15 @@ func (g *groupShareAPI) RegisterChannel(name, groupID string, opts ...ChannelOpt
 	})
 }
 
-func (g *groupShareAPI) Subscribe(channel string, topics []string) error {
+func (g *sharedDB) Subscribe(channel string, topics []string) error {
 	return g.layer.Subscribe(channel, topics)
 }
 
-func (g *groupShareAPI) Put(ctx context.Context, channel, topic, recordID string, body []byte) error {
+func (g *sharedDB) Put(ctx context.Context, channel, topic, recordID string, body []byte) error {
 	return g.layer.Put(ctx, channel, topic, recordID, body)
 }
 
-func (g *groupShareAPI) Get(ctx context.Context, channel, recordID string) (*SharedRecord, error) {
+func (g *sharedDB) Get(ctx context.Context, channel, recordID string) (*SharedRecord, error) {
 	rec, err := g.layer.Get(ctx, channel, recordID)
 	if err != nil || rec == nil {
 		return nil, err
@@ -92,11 +132,11 @@ func (g *groupShareAPI) Get(ctx context.Context, channel, recordID string) (*Sha
 	}, nil
 }
 
-func (g *groupShareAPI) Delete(ctx context.Context, channel, topic, recordID string) error {
+func (g *sharedDB) Delete(ctx context.Context, channel, topic, recordID string) error {
 	return g.layer.Delete(ctx, channel, topic, recordID)
 }
 
-func (g *groupShareAPI) List(ctx context.Context, channel string) ([]*SharedRecord, error) {
+func (g *sharedDB) List(ctx context.Context, channel string) ([]*SharedRecord, error) {
 	recs, err := g.layer.List(ctx, channel)
 	if err != nil {
 		return nil, err
@@ -118,7 +158,7 @@ func (g *groupShareAPI) List(ctx context.Context, channel string) ([]*SharedReco
 	return out, nil
 }
 
-func (g *groupShareAPI) Dump(ctx context.Context, groupID string) ([]*SharedRecord, error) {
+func (g *sharedDB) Dump(ctx context.Context, groupID string) ([]*SharedRecord, error) {
 	recs, err := g.layer.Dump(ctx, groupID)
 	if err != nil {
 		return nil, err
@@ -138,11 +178,11 @@ func (g *groupShareAPI) Dump(ctx context.Context, groupID string) ([]*SharedReco
 	return out, nil
 }
 
-func (g *groupShareAPI) Purge(ctx context.Context, channel string) (int, error) {
+func (g *sharedDB) Purge(ctx context.Context, channel string) (int, error) {
 	return g.layer.Purge(ctx, channel)
 }
 
-func (g *groupShareAPI) Restore(ctx context.Context, records []*SharedRecord) (int, error) {
+func (g *sharedDB) Restore(ctx context.Context, records []*SharedRecord) (int, error) {
 	internal := make([]*groupshare.SharedRecord, len(records))
 	for i, r := range records {
 		internal[i] = &groupshare.SharedRecord{
@@ -158,26 +198,26 @@ func (g *groupShareAPI) Restore(ctx context.Context, records []*SharedRecord) (i
 	return g.layer.Restore(ctx, internal)
 }
 
-// groupAPI wraps group.Service + group.Store to implement GroupAPI.
-type groupAPI struct {
+// networkAPI wraps group.Service + group.Store to implement GroupAPI.
+type networkAPI struct {
 	service *group.Service
 	store   group.Store
 	selfDID string
 }
 
-func (g *groupAPI) CreateGroup(ctx context.Context, memberDIDs []string) (string, error) {
+func (g *networkAPI) CreateGroup(ctx context.Context, memberDIDs []string) (string, error) {
 	return g.service.CreateGroup(memberDIDs, []string{g.selfDID})
 }
 
-func (g *groupAPI) AddMember(ctx context.Context, groupID, memberDID string) error {
+func (g *networkAPI) AddMember(ctx context.Context, groupID, memberDID string) error {
 	return g.service.AddMember(groupID, memberDID)
 }
 
-func (g *groupAPI) Leave(ctx context.Context, groupID string) error {
+func (g *networkAPI) Leave(ctx context.Context, groupID string) error {
 	return g.service.Leave(groupID, g.selfDID)
 }
 
-func (g *groupAPI) ListGroups(ctx context.Context) ([]string, error) {
+func (g *networkAPI) ListGroups(ctx context.Context) ([]string, error) {
 	return g.store.ListGroupIDsForMember(g.selfDID)
 }
 

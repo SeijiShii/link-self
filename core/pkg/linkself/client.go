@@ -23,9 +23,9 @@ import (
 type client struct {
 	node           *node.Node
 	identity       *did.Identity
-	deviceDB       *deviceDB
-	groupShare     *groupShareAPI
-	groups         *groupAPI
+	myDB           *myDB
+	sharedDB       *sharedDB
+	network        *networkAPI
 	storageBackend StorageBackend
 }
 
@@ -131,12 +131,12 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 			return n.SendToPeerID(ctx, pid, wrapped)
 		},
 	}
-	c.deviceDB = &deviceDB{engine: dsEngine}
+	c.myDB = &myDB{engine: dsEngine}
 
 	// Wire Group layer.
 	groupStore := stores.groupStore
 	groupService := group.NewService(groupStore)
-	c.groups = &groupAPI{
+	c.network = &networkAPI{
 		service: groupService,
 		store:   groupStore,
 		selfDID: identity.DID,
@@ -167,7 +167,7 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		}
 		return n.SendToGroup(ctx, memberDIDs, wrapped)
 	}
-	c.groupShare = &groupShareAPI{layer: gsLayer}
+	c.sharedDB = &sharedDB{layer: gsLayer}
 
 	// Wire incoming message handlers.
 	n.SetOnGroupShare(func(peerDID string, payload []byte) {
@@ -258,28 +258,28 @@ func (c *client) SetOnMessage(handler MessageHandler) {
 	}
 }
 
-// DeviceDB returns the DeviceDB interface. Returns nil before Start.
-func (c *client) DeviceDB() DeviceDB {
-	if c.deviceDB == nil {
+// MyDB returns the MyDB interface. Returns nil before Start.
+func (c *client) MyDB() MyDB {
+	if c.myDB == nil {
 		return nil
 	}
-	return c.deviceDB
+	return c.myDB
 }
 
-// GroupShare returns the GroupShareAPI interface. Returns nil before Start.
-func (c *client) GroupShare() GroupShareAPI {
-	if c.groupShare == nil {
+// SharedDB returns the SharedDB interface. Returns nil before Start.
+func (c *client) SharedDB() SharedDB {
+	if c.sharedDB == nil {
 		return nil
 	}
-	return c.groupShare
+	return c.sharedDB
 }
 
-// Groups returns the GroupAPI interface. Returns nil before Start.
-func (c *client) Groups() GroupAPI {
-	if c.groups == nil {
+// Network returns the NetworkAPI interface. Returns nil before Start.
+func (c *client) Network() NetworkAPI {
+	if c.network == nil {
 		return nil
 	}
-	return c.groups
+	return c.network
 }
 
 // loadOrGenerateIdentity loads an identity from file or generates a new one.

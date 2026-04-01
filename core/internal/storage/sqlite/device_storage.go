@@ -156,3 +156,21 @@ func (s *deviceStorage) LatestSeq(ctx context.Context) (uint64, error) {
 	}
 	return uint64(seq.Int64), nil
 }
+
+func (s *deviceStorage) ListTables(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT tbl FROM device_records`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		tables = append(tables, t)
+	}
+	return tables, rows.Err()
+}

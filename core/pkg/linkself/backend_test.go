@@ -145,7 +145,7 @@ func TestSQLiteBackend_DataSurvivesRestart(t *testing.T) {
 		t.Fatalf("First Start failed: %v", err)
 	}
 
-	db1 := c1.DeviceDB()
+	db1 := c1.MyDB()
 	if err := db1.Put(ctx, "notes", "n1", []byte(`{"text":"hello"}`)); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestSQLiteBackend_DataSurvivesRestart(t *testing.T) {
 	}
 	defer c2.Stop(ctx)
 
-	db2 := c2.DeviceDB()
+	db2 := c2.MyDB()
 	rec, err := db2.Get(ctx, "notes", "n1")
 	if err != nil {
 		t.Fatalf("Get after restart: %v", err)
@@ -234,7 +234,7 @@ func TestMemoryBackend_PutGet(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DeviceDB()
+	db := c.MyDB()
 	if err := db.Put(ctx, "items", "i1", []byte(`{"v":1}`)); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestSQLiteBackend_GroupSurvivesRestart(t *testing.T) {
 	}
 
 	myDID := c1.GetMyDID()
-	groups1 := c1.Groups()
+	groups1 := c1.Network()
 	groupID, err := groups1.CreateGroup(ctx, []string{myDID, "did:key:peer"})
 	if err != nil {
 		t.Fatalf("CreateGroup: %v", err)
@@ -294,7 +294,7 @@ func TestSQLiteBackend_GroupSurvivesRestart(t *testing.T) {
 	}
 	defer c2.Stop(ctx)
 
-	ids, err := c2.Groups().ListGroups(ctx)
+	ids, err := c2.Network().ListGroups(ctx)
 	if err != nil {
 		t.Fatalf("ListGroups: %v", err)
 	}
@@ -310,15 +310,15 @@ func TestSQLiteBackend_GroupSurvivesRestart(t *testing.T) {
 	}
 }
 
-// TestGroupShare_Subscribe: Subscribe sets the local subscription topics.
-func TestGroupShare_Subscribe(t *testing.T) {
+// TestSharedDB_Subscribe: Subscribe sets the local subscription topics.
+func TestSharedDB_Subscribe(t *testing.T) {
 	c, ctx, cancel := startClient(t, t.TempDir(), MemoryBackend())
 	defer cancel()
 	defer c.Stop(ctx)
 
 	myDID := c.GetMyDID()
-	groupID, _ := c.Groups().CreateGroup(ctx, []string{myDID, "did:key:peer"})
-	gs := c.GroupShare()
+	groupID, _ := c.Network().CreateGroup(ctx, []string{myDID, "did:key:peer"})
+	gs := c.SharedDB()
 	_ = gs.RegisterChannel("feed", groupID)
 
 	// Subscribe to specific topics — should not error.
@@ -332,15 +332,15 @@ func TestGroupShare_Subscribe(t *testing.T) {
 	}
 }
 
-// TestGroupShare_DumpAndRestore: Dump returns written records; Restore re-applies them.
-func TestGroupShare_DumpAndRestore(t *testing.T) {
+// TestSharedDB_DumpAndRestore: Dump returns written records; Restore re-applies them.
+func TestSharedDB_DumpAndRestore(t *testing.T) {
 	c, ctx, cancel := startClient(t, t.TempDir(), MemoryBackend())
 	defer cancel()
 	defer c.Stop(ctx)
 
 	myDID := c.GetMyDID()
-	groupID, _ := c.Groups().CreateGroup(ctx, []string{myDID, "did:key:peer"})
-	gs := c.GroupShare()
+	groupID, _ := c.Network().CreateGroup(ctx, []string{myDID, "did:key:peer"})
+	gs := c.SharedDB()
 	_ = gs.RegisterChannel("feed", groupID)
 
 	_ = gs.Put(ctx, "feed", "topic1", "r1", []byte(`{"a":1}`))
@@ -360,8 +360,8 @@ func TestGroupShare_DumpAndRestore(t *testing.T) {
 	defer c2.Stop(ctx2)
 
 	myDID2 := c2.GetMyDID()
-	groupID2, _ := c2.Groups().CreateGroup(ctx2, []string{myDID2, "did:key:peer"})
-	gs2 := c2.GroupShare()
+	groupID2, _ := c2.Network().CreateGroup(ctx2, []string{myDID2, "did:key:peer"})
+	gs2 := c2.SharedDB()
 	_ = gs2.RegisterChannel("feed", groupID2)
 
 	// Remap groupID in records to c2's group so Restore can match channels.
@@ -378,15 +378,15 @@ func TestGroupShare_DumpAndRestore(t *testing.T) {
 	}
 }
 
-// TestGroupShare_Purge: Purge on a channel without expired records returns 0, no error.
-func TestGroupShare_Purge(t *testing.T) {
+// TestSharedDB_Purge: Purge on a channel without expired records returns 0, no error.
+func TestSharedDB_Purge(t *testing.T) {
 	c, ctx, cancel := startClient(t, t.TempDir(), MemoryBackend())
 	defer cancel()
 	defer c.Stop(ctx)
 
 	myDID := c.GetMyDID()
-	groupID, _ := c.Groups().CreateGroup(ctx, []string{myDID, "did:key:peer"})
-	gs := c.GroupShare()
+	groupID, _ := c.Network().CreateGroup(ctx, []string{myDID, "did:key:peer"})
+	gs := c.SharedDB()
 	_ = gs.RegisterChannel("feed", groupID)
 	_ = gs.Put(ctx, "feed", "", "r1", []byte(`{}`))
 
@@ -407,8 +407,8 @@ func TestWithRetention(t *testing.T) {
 	defer c.Stop(ctx)
 
 	myDID := c.GetMyDID()
-	groupID, _ := c.Groups().CreateGroup(ctx, []string{myDID, "did:key:peer"})
-	gs := c.GroupShare()
+	groupID, _ := c.Network().CreateGroup(ctx, []string{myDID, "did:key:peer"})
+	gs := c.SharedDB()
 
 	// Register channel with retention option.
 	if err := gs.RegisterChannel("feed", groupID, WithRetention(24*time.Hour)); err != nil {
@@ -477,15 +477,15 @@ func TestSQLiteBackend_InvalidPath(t *testing.T) {
 	}
 }
 
-// TestGroupShare_RegisterChannel_WithRetentionOption: RegisterChannel with option does not panic.
-func TestGroupShare_RegisterChannel_WithRetentionOption(t *testing.T) {
+// TestSharedDB_RegisterChannel_WithRetentionOption: RegisterChannel with option does not panic.
+func TestSharedDB_RegisterChannel_WithRetentionOption(t *testing.T) {
 	c, ctx, cancel := startClient(t, t.TempDir(), nil)
 	defer cancel()
 	defer c.Stop(ctx)
 
 	myDID := c.GetMyDID()
-	groupID, _ := c.Groups().CreateGroup(ctx, []string{myDID, "did:key:p"})
-	gs := c.GroupShare()
+	groupID, _ := c.Network().CreateGroup(ctx, []string{myDID, "did:key:p"})
+	gs := c.SharedDB()
 
 	opt := WithRetention(time.Hour)
 	if err := gs.RegisterChannel("ch", groupID, opt); err != nil {

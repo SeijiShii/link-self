@@ -192,39 +192,43 @@ func handleRequest(req *JSONRPCRequest) {
 		handleSendMessage(req)
 	case "connect":
 		handleConnect(req)
-	case "devicedb.put":
+	case "mydb.put":
 		handleDeviceDBPut(req)
-	case "devicedb.get":
+	case "mydb.get":
 		handleDeviceDBGet(req)
-	case "devicedb.delete":
+	case "mydb.delete":
 		handleDeviceDBDelete(req)
-	case "devicedb.list":
+	case "mydb.list":
 		handleDeviceDBList(req)
-	case "groupshare.register":
+	case "mydb.dump":
+		handleMyDBDump(req)
+	case "mydb.restore":
+		handleMyDBRestore(req)
+	case "shareddb.register":
 		handleGroupShareRegister(req)
-	case "groupshare.subscribe":
+	case "shareddb.subscribe":
 		handleGroupShareSubscribe(req)
-	case "groupshare.put":
+	case "shareddb.put":
 		handleGroupSharePut(req)
-	case "groupshare.get":
+	case "shareddb.get":
 		handleGroupShareGet(req)
-	case "groupshare.delete":
+	case "shareddb.delete":
 		handleGroupShareDelete(req)
-	case "groupshare.list":
+	case "shareddb.list":
 		handleGroupShareList(req)
-	case "groupshare.dump":
+	case "shareddb.dump":
 		handleGroupShareDump(req)
-	case "groupshare.restore":
+	case "shareddb.restore":
 		handleGroupShareRestore(req)
-	case "groupshare.purge":
+	case "shareddb.purge":
 		handleGroupSharePurge(req)
-	case "groups.create":
+	case "network.create":
 		handleGroupsCreate(req)
-	case "groups.addMember":
+	case "network.addMember":
 		handleGroupsAddMember(req)
-	case "groups.leave":
+	case "network.leave":
 		handleGroupsLeave(req)
-	case "groups.list":
+	case "network.list":
 		handleGroupsList(req)
 	default:
 		sendError(req.ID, -32601, "Method not found", fmt.Sprintf("Unknown method: %s", req.Method))
@@ -389,7 +393,7 @@ func handleDeviceDBPut(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.DeviceDB().Put(ctx, params.Table, params.RecordID, params.Body); err != nil {
+	if err := linkSelfClient.MyDB().Put(ctx, params.Table, params.RecordID, params.Body); err != nil {
 		sendError(req.ID, -32000, "devicedb.put failed", err.Error())
 		return
 	}
@@ -404,7 +408,7 @@ func handleDeviceDBGet(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	rec, err := linkSelfClient.DeviceDB().Get(ctx, params.Table, params.RecordID)
+	rec, err := linkSelfClient.MyDB().Get(ctx, params.Table, params.RecordID)
 	if err != nil {
 		sendError(req.ID, -32000, "devicedb.get failed", err.Error())
 		return
@@ -420,7 +424,7 @@ func handleDeviceDBDelete(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.DeviceDB().Delete(ctx, params.Table, params.RecordID); err != nil {
+	if err := linkSelfClient.MyDB().Delete(ctx, params.Table, params.RecordID); err != nil {
 		sendError(req.ID, -32000, "devicedb.delete failed", err.Error())
 		return
 	}
@@ -435,7 +439,7 @@ func handleDeviceDBList(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	recs, err := linkSelfClient.DeviceDB().List(ctx, params.Table)
+	recs, err := linkSelfClient.MyDB().List(ctx, params.Table)
 	if err != nil {
 		sendError(req.ID, -32000, "devicedb.list failed", err.Error())
 		return
@@ -443,7 +447,39 @@ func handleDeviceDBList(req *JSONRPCRequest) {
 	sendResponse(req.ID, recs)
 }
 
-// --- GroupShare handlers ---
+func handleMyDBDump(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	recs, err := linkSelfClient.MyDB().Dump(ctx)
+	if err != nil {
+		sendError(req.ID, -32000, "mydb.dump failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, recs)
+}
+
+type MyDBRestoreParams struct {
+	Records []*linkself.Record `json:"records"`
+}
+
+func handleMyDBRestore(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params MyDBRestoreParams
+	if !parseParams(req, &params) {
+		return
+	}
+	applied, err := linkSelfClient.MyDB().Restore(ctx, params.Records)
+	if err != nil {
+		sendError(req.ID, -32000, "mydb.restore failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]int{"applied": applied})
+}
+
+// --- SharedDB handlers ---
 
 func handleGroupShareSubscribe(req *JSONRPCRequest) {
 	if !requireClient(req) {
@@ -453,7 +489,7 @@ func handleGroupShareSubscribe(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().Subscribe(params.Channel, params.Topics); err != nil {
+	if err := linkSelfClient.SharedDB().Subscribe(params.Channel, params.Topics); err != nil {
 		sendError(req.ID, -32000, "groupshare.subscribe failed", err.Error())
 		return
 	}
@@ -477,7 +513,7 @@ func handleGroupShareRegister(req *JSONRPCRequest) {
 		}
 		opts = append(opts, linkself.WithRetention(d))
 	}
-	if err := linkSelfClient.GroupShare().RegisterChannel(params.Channel, params.GroupID, opts...); err != nil {
+	if err := linkSelfClient.SharedDB().RegisterChannel(params.Channel, params.GroupID, opts...); err != nil {
 		sendError(req.ID, -32000, "groupshare.register failed", err.Error())
 		return
 	}
@@ -492,7 +528,7 @@ func handleGroupSharePut(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().Put(ctx, params.Channel, params.Topic, params.RecordID, params.Body); err != nil {
+	if err := linkSelfClient.SharedDB().Put(ctx, params.Channel, params.Topic, params.RecordID, params.Body); err != nil {
 		sendError(req.ID, -32000, "groupshare.put failed", err.Error())
 		return
 	}
@@ -507,7 +543,7 @@ func handleGroupShareGet(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	rec, err := linkSelfClient.GroupShare().Get(ctx, params.Channel, params.RecordID)
+	rec, err := linkSelfClient.SharedDB().Get(ctx, params.Channel, params.RecordID)
 	if err != nil {
 		sendError(req.ID, -32000, "groupshare.get failed", err.Error())
 		return
@@ -523,7 +559,7 @@ func handleGroupShareDelete(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.GroupShare().Delete(ctx, params.Channel, params.Topic, params.RecordID); err != nil {
+	if err := linkSelfClient.SharedDB().Delete(ctx, params.Channel, params.Topic, params.RecordID); err != nil {
 		sendError(req.ID, -32000, "groupshare.delete failed", err.Error())
 		return
 	}
@@ -538,7 +574,7 @@ func handleGroupShareList(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	recs, err := linkSelfClient.GroupShare().List(ctx, params.Channel)
+	recs, err := linkSelfClient.SharedDB().List(ctx, params.Channel)
 	if err != nil {
 		sendError(req.ID, -32000, "groupshare.list failed", err.Error())
 		return
@@ -554,7 +590,7 @@ func handleGroupShareDump(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	recs, err := linkSelfClient.GroupShare().Dump(ctx, params.GroupID)
+	recs, err := linkSelfClient.SharedDB().Dump(ctx, params.GroupID)
 	if err != nil {
 		sendError(req.ID, -32000, "groupshare.dump failed", err.Error())
 		return
@@ -570,7 +606,7 @@ func handleGroupShareRestore(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	applied, err := linkSelfClient.GroupShare().Restore(ctx, params.Records)
+	applied, err := linkSelfClient.SharedDB().Restore(ctx, params.Records)
 	if err != nil {
 		sendError(req.ID, -32000, "groupshare.restore failed", err.Error())
 		return
@@ -586,7 +622,7 @@ func handleGroupSharePurge(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	purged, err := linkSelfClient.GroupShare().Purge(ctx, params.Channel)
+	purged, err := linkSelfClient.SharedDB().Purge(ctx, params.Channel)
 	if err != nil {
 		sendError(req.ID, -32000, "groupshare.purge failed", err.Error())
 		return
@@ -604,7 +640,7 @@ func handleGroupsCreate(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	groupID, err := linkSelfClient.Groups().CreateGroup(ctx, params.MemberDIDs)
+	groupID, err := linkSelfClient.Network().CreateGroup(ctx, params.MemberDIDs)
 	if err != nil {
 		sendError(req.ID, -32000, "groups.create failed", err.Error())
 		return
@@ -620,7 +656,7 @@ func handleGroupsAddMember(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.Groups().AddMember(ctx, params.GroupID, params.MemberDID); err != nil {
+	if err := linkSelfClient.Network().AddMember(ctx, params.GroupID, params.MemberDID); err != nil {
 		sendError(req.ID, -32000, "groups.addMember failed", err.Error())
 		return
 	}
@@ -635,7 +671,7 @@ func handleGroupsLeave(req *JSONRPCRequest) {
 	if !parseParams(req, &params) {
 		return
 	}
-	if err := linkSelfClient.Groups().Leave(ctx, params.GroupID); err != nil {
+	if err := linkSelfClient.Network().Leave(ctx, params.GroupID); err != nil {
 		sendError(req.ID, -32000, "groups.leave failed", err.Error())
 		return
 	}
@@ -646,7 +682,7 @@ func handleGroupsList(req *JSONRPCRequest) {
 	if !requireClient(req) {
 		return
 	}
-	groups, err := linkSelfClient.Groups().ListGroups(ctx)
+	groups, err := linkSelfClient.Network().ListGroups(ctx)
 	if err != nil {
 		sendError(req.ID, -32000, "groups.list failed", err.Error())
 		return

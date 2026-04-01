@@ -267,22 +267,22 @@ type Client interface {
 	// nilで呼び出された場合、メッセージ処理は無効になります。
 	SetOnMessage(handler MessageHandler)
 
-	// DeviceDB returns the DeviceDB interface for private cross-device sync.
+	// MyDB returns the MyDB interface for private cross-device sync.
 	// Returns nil if the node is not started.
-	DeviceDB() DeviceDB
+	MyDB() MyDB
 
-	// GroupShare returns the GroupShareAPI for group-shared data.
+	// SharedDB returns the SharedDB interface for group-shared data.
 	// Returns nil if the node is not started.
-	GroupShare() GroupShareAPI
+	SharedDB() SharedDB
 
-	// Groups returns the GroupAPI for group management.
+	// Network returns the NetworkAPI for network management.
 	// Returns nil if the node is not started.
-	Groups() GroupAPI
+	Network() NetworkAPI
 }
 
-// DeviceDB provides private data sync across devices sharing the same DID.
+// MyDB provides private data sync across devices sharing the same DID.
 // All writes are automatically replicated to other devices via DeviceSync.
-type DeviceDB interface {
+type MyDB interface {
 	// Put stores a record in the given table. Replicated to all devices.
 	Put(ctx context.Context, table, recordID string, body []byte) error
 
@@ -294,10 +294,17 @@ type DeviceDB interface {
 
 	// List returns all records in a table.
 	List(ctx context.Context, table string) ([]*Record, error)
+
+	// Dump returns all records across all tables.
+	Dump(ctx context.Context) ([]*Record, error)
+
+	// Restore applies records using last-write-wins by timestamp.
+	// Returns the number of records actually applied.
+	Restore(ctx context.Context, records []*Record) (int, error)
 }
 
-// GroupShareAPI provides shared data channels for groups of different DIDs.
-type GroupShareAPI interface {
+// SharedDB provides shared data channels for network members (different DIDs).
+type SharedDB interface {
 	// RegisterChannel registers a named channel bound to a group.
 	// Optional ChannelOption can configure retention, etc.
 	RegisterChannel(name, groupID string, opts ...ChannelOption) error
@@ -348,13 +355,13 @@ func WithRetention(d time.Duration) ChannelOption {
 	}
 }
 
-// GroupAPI manages groups (membership, ownership).
-type GroupAPI interface {
+// NetworkAPI manages networks (membership).
+type NetworkAPI interface {
 	// CreateGroup creates a new group with the given member DIDs.
-	// The creator (this node's DID) is automatically included and set as owner.
+	// The creator (this node's DID) is automatically included.
 	CreateGroup(ctx context.Context, memberDIDs []string) (groupID string, err error)
 
-	// AddMember adds a member to a group. Requires owner permission.
+	// AddMember adds a member to a group.
 	AddMember(ctx context.Context, groupID, memberDID string) error
 
 	// Leave removes this node from the group.

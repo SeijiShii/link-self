@@ -7,32 +7,32 @@ import (
 	"time"
 )
 
-// TestDeviceDB_NilBeforeStart: DeviceDB() returns nil before Start.
-func TestDeviceDB_NilBeforeStart(t *testing.T) {
+// TestMyDB_NilBeforeStart: MyDB() returns nil before Start.
+func TestMyDB_NilBeforeStart(t *testing.T) {
 	c := NewClient()
-	if c.DeviceDB() != nil {
-		t.Error("DeviceDB() should return nil before Start")
+	if c.MyDB() != nil {
+		t.Error("MyDB() should return nil before Start")
 	}
 }
 
-// TestGroupShare_NilBeforeStart: GroupShare() returns nil before Start.
-func TestGroupShare_NilBeforeStart(t *testing.T) {
+// TestSharedDB_NilBeforeStart: SharedDB() returns nil before Start.
+func TestSharedDB_NilBeforeStart(t *testing.T) {
 	c := NewClient()
-	if c.GroupShare() != nil {
-		t.Error("GroupShare() should return nil before Start")
+	if c.SharedDB() != nil {
+		t.Error("SharedDB() should return nil before Start")
 	}
 }
 
-// TestGroups_NilBeforeStart: Groups() returns nil before Start.
-func TestGroups_NilBeforeStart(t *testing.T) {
+// TestNetwork_NilBeforeStart: Network() returns nil before Start.
+func TestNetwork_NilBeforeStart(t *testing.T) {
 	c := NewClient()
-	if c.Groups() != nil {
-		t.Error("Groups() should return nil before Start")
+	if c.Network() != nil {
+		t.Error("Network() should return nil before Start")
 	}
 }
 
-// TestDeviceDB_AvailableAfterStart: DeviceDB() returns non-nil after Start.
-func TestDeviceDB_AvailableAfterStart(t *testing.T) {
+// TestMyDB_AvailableAfterStart: DeviceDB() returns non-nil after Start.
+func TestMyDB_AvailableAfterStart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -47,13 +47,13 @@ func TestDeviceDB_AvailableAfterStart(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	if c.DeviceDB() == nil {
+	if c.MyDB() == nil {
 		t.Error("DeviceDB() should return non-nil after Start")
 	}
 }
 
-// TestGroupShare_AvailableAfterStart: GroupShare() returns non-nil after Start.
-func TestGroupShare_AvailableAfterStart(t *testing.T) {
+// TestSharedDB_AvailableAfterStart: GroupShare() returns non-nil after Start.
+func TestSharedDB_AvailableAfterStart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -68,13 +68,13 @@ func TestGroupShare_AvailableAfterStart(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	if c.GroupShare() == nil {
+	if c.SharedDB() == nil {
 		t.Error("GroupShare() should return non-nil after Start")
 	}
 }
 
-// TestGroups_AvailableAfterStart: Groups() returns non-nil after Start.
-func TestGroups_AvailableAfterStart(t *testing.T) {
+// TestNetwork_AvailableAfterStart: Groups() returns non-nil after Start.
+func TestNetwork_AvailableAfterStart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -89,13 +89,13 @@ func TestGroups_AvailableAfterStart(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	if c.Groups() == nil {
+	if c.Network() == nil {
 		t.Error("Groups() should return non-nil after Start")
 	}
 }
 
-// TestDeviceDB_PutGet: Put a record then Get it back.
-func TestDeviceDB_PutGet(t *testing.T) {
+// TestMyDB_PutGet: Put a record then Get it back.
+func TestMyDB_PutGet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -110,7 +110,7 @@ func TestDeviceDB_PutGet(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DeviceDB()
+	db := c.MyDB()
 
 	// Put
 	if err := db.Put(ctx, "contacts", "alice", []byte(`{"name":"Alice"}`)); err != nil {
@@ -136,8 +136,8 @@ func TestDeviceDB_PutGet(t *testing.T) {
 	}
 }
 
-// TestDeviceDB_Delete: Put then Delete; Get returns nil.
-func TestDeviceDB_Delete(t *testing.T) {
+// TestMyDB_Delete: Put then Delete; Get returns nil.
+func TestMyDB_Delete(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -152,7 +152,7 @@ func TestDeviceDB_Delete(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DeviceDB()
+	db := c.MyDB()
 
 	_ = db.Put(ctx, "contacts", "alice", []byte(`{"name":"Alice"}`))
 	if err := db.Delete(ctx, "contacts", "alice"); err != nil {
@@ -168,8 +168,8 @@ func TestDeviceDB_Delete(t *testing.T) {
 	}
 }
 
-// TestDeviceDB_List: Put multiple records; List returns them.
-func TestDeviceDB_List(t *testing.T) {
+// TestMyDB_List: Put multiple records; List returns them.
+func TestMyDB_List(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -184,7 +184,7 @@ func TestDeviceDB_List(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DeviceDB()
+	db := c.MyDB()
 
 	_ = db.Put(ctx, "contacts", "alice", []byte(`{"name":"Alice"}`))
 	_ = db.Put(ctx, "contacts", "bob", []byte(`{"name":"Bob"}`))
@@ -198,8 +198,8 @@ func TestDeviceDB_List(t *testing.T) {
 	}
 }
 
-// TestGroups_CreateAndList: Create a group and list it.
-func TestGroups_CreateAndList(t *testing.T) {
+// TestNetwork_CreateAndList: Create a group and list it.
+func TestNetwork_CreateAndList(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -214,7 +214,7 @@ func TestGroups_CreateAndList(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 
 	groupID, err := groups.CreateGroup(ctx, []string{myDID, "did:key:other-member"})
@@ -234,8 +234,8 @@ func TestGroups_CreateAndList(t *testing.T) {
 	}
 }
 
-// TestGroups_Leave: Create a group, then leave it.
-func TestGroups_Leave(t *testing.T) {
+// TestNetwork_Leave: Create a group, then leave it.
+func TestNetwork_Leave(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -250,7 +250,7 @@ func TestGroups_Leave(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 
 	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other-member"})
@@ -264,8 +264,8 @@ func TestGroups_Leave(t *testing.T) {
 	}
 }
 
-// TestGroupShare_RegisterAndPutGet: Register channel, put, get.
-func TestGroupShare_RegisterAndPutGet(t *testing.T) {
+// TestSharedDB_RegisterAndPutGet: Register channel, put, get.
+func TestSharedDB_RegisterAndPutGet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -280,12 +280,12 @@ func TestGroupShare_RegisterAndPutGet(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 
 	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
 
-	gs := c.GroupShare()
+	gs := c.SharedDB()
 	if err := gs.RegisterChannel("notes", groupID); err != nil {
 		t.Fatalf("RegisterChannel: %v", err)
 	}
@@ -312,8 +312,8 @@ func TestGroupShare_RegisterAndPutGet(t *testing.T) {
 	}
 }
 
-// TestGroups_AddMember: Create a group, then add a member.
-func TestGroups_AddMember(t *testing.T) {
+// TestNetwork_AddMember: Create a group, then add a member.
+func TestNetwork_AddMember(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -328,7 +328,7 @@ func TestGroups_AddMember(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 
 	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:bob"})
@@ -337,8 +337,8 @@ func TestGroups_AddMember(t *testing.T) {
 	}
 }
 
-// TestGroupShare_GetNotFound: Get a non-existent record returns nil.
-func TestGroupShare_GetNotFound(t *testing.T) {
+// TestSharedDB_GetNotFound: Get a non-existent record returns nil.
+func TestSharedDB_GetNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -353,11 +353,11 @@ func TestGroupShare_GetNotFound(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
 
-	gs := c.GroupShare()
+	gs := c.SharedDB()
 	_ = gs.RegisterChannel("notes", groupID)
 
 	rec, err := gs.Get(ctx, "notes", "nonexistent")
@@ -369,8 +369,8 @@ func TestGroupShare_GetNotFound(t *testing.T) {
 	}
 }
 
-// TestDeviceDB_GetNotFound: Get a non-existent record returns nil.
-func TestDeviceDB_GetNotFound(t *testing.T) {
+// TestMyDB_GetNotFound: Get a non-existent record returns nil.
+func TestMyDB_GetNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -385,7 +385,7 @@ func TestDeviceDB_GetNotFound(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	db := c.DeviceDB()
+	db := c.MyDB()
 	rec, err := db.Get(ctx, "contacts", "nonexistent")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -395,8 +395,8 @@ func TestDeviceDB_GetNotFound(t *testing.T) {
 	}
 }
 
-// TestGroupShare_DeleteAndList: Register, put, delete, list.
-func TestGroupShare_DeleteAndList(t *testing.T) {
+// TestSharedDB_DeleteAndList: Register, put, delete, list.
+func TestSharedDB_DeleteAndList(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -411,11 +411,11 @@ func TestGroupShare_DeleteAndList(t *testing.T) {
 	}
 	defer c.Stop(ctx)
 
-	groups := c.Groups()
+	groups := c.Network()
 	myDID := c.GetMyDID()
 	groupID, _ := groups.CreateGroup(ctx, []string{myDID, "did:key:other"})
 
-	gs := c.GroupShare()
+	gs := c.SharedDB()
 	_ = gs.RegisterChannel("notes", groupID)
 	_ = gs.Put(ctx, "notes", "", "n1", []byte(`a`))
 	_ = gs.Put(ctx, "notes", "", "n2", []byte(`b`))
@@ -432,5 +432,138 @@ func TestGroupShare_DeleteAndList(t *testing.T) {
 	recs, _ = gs.List(ctx, "notes")
 	if len(recs) != 1 {
 		t.Errorf("List after Delete = %d, want 1", len(recs))
+	}
+}
+
+// TestMyDB_DumpRestore: Dump all records, then restore to a fresh client.
+func TestMyDB_DumpRestore(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+
+	// Put some records in two tables
+	_ = db.Put(ctx, "contacts", "alice", []byte(`{"name":"Alice"}`))
+	_ = db.Put(ctx, "contacts", "bob", []byte(`{"name":"Bob"}`))
+	_ = db.Put(ctx, "notes", "n1", []byte(`{"text":"hello"}`))
+
+	// Dump
+	records, err := db.Dump(ctx)
+	if err != nil {
+		t.Fatalf("Dump: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("Dump returned %d records, want 3", len(records))
+	}
+
+	// Start a fresh client and restore
+	c2 := NewClient()
+	config2 := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity2.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err = c2.Start(ctx, config2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c2.Stop(ctx)
+
+	db2 := c2.MyDB()
+	applied, err := db2.Restore(ctx, records)
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if applied != 3 {
+		t.Errorf("Restore applied %d, want 3", applied)
+	}
+
+	// Verify restored data
+	rec, _ := db2.Get(ctx, "contacts", "alice")
+	if rec == nil {
+		t.Fatal("restored alice not found")
+	}
+	if string(rec.Body) != `{"name":"Alice"}` {
+		t.Errorf("alice Body = %q", rec.Body)
+	}
+
+	recs, _ := db2.List(ctx, "contacts")
+	if len(recs) != 2 {
+		t.Errorf("contacts count = %d, want 2", len(recs))
+	}
+}
+
+// TestMyDB_DumpEmpty: Dump on empty DB returns empty slice.
+func TestMyDB_DumpEmpty(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	records, err := c.MyDB().Dump(ctx)
+	if err != nil {
+		t.Fatalf("Dump: %v", err)
+	}
+	if len(records) != 0 {
+		t.Errorf("Dump on empty DB returned %d records, want 0", len(records))
+	}
+}
+
+// TestMyDB_RestoreLWW: Restore skips older records.
+func TestMyDB_RestoreLWW(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+
+	// Put a record (will have current timestamp)
+	_ = db.Put(ctx, "contacts", "alice", []byte(`{"name":"Alice-new"}`))
+
+	// Try to restore an older version
+	oldRecords := []*Record{
+		{ID: "alice", Table: "contacts", Body: []byte(`{"name":"Alice-old"}`), Timestamp: 1},
+	}
+	applied, err := db.Restore(ctx, oldRecords)
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if applied != 0 {
+		t.Errorf("Restore applied %d, want 0 (older record should be skipped)", applied)
+	}
+
+	// Original should be unchanged
+	rec, _ := db.Get(ctx, "contacts", "alice")
+	if string(rec.Body) != `{"name":"Alice-new"}` {
+		t.Errorf("Body = %q, want Alice-new", rec.Body)
 	}
 }
