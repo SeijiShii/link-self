@@ -59,6 +59,31 @@ type ChangeLogRetention struct {
 	MaxCount int           // for CountBased (default: 10000)
 }
 
+// SyncScope controls how a table's data is replicated.
+type SyncScope int
+
+const (
+	// ScopeDevice syncs data only across the user's own devices (default).
+	ScopeDevice SyncScope = iota
+	// ScopeNetwork syncs data to all network members.
+	ScopeNetwork
+)
+
+// SyncScopeOption configures SetSyncScope behavior.
+type SyncScopeOption func(*syncScopeConfig)
+
+type syncScopeConfig struct {
+	includeExisting bool
+}
+
+// WithIncludeExisting controls whether existing data is synced when changing scope.
+// Default is false (only new writes are shared).
+func WithIncludeExisting(include bool) SyncScopeOption {
+	return func(c *syncScopeConfig) {
+		c.includeExisting = include
+	}
+}
+
 // Config holds configuration for creating a LinkSelf node.
 //
 // All fields are optional and have sensible defaults:
@@ -341,6 +366,12 @@ type MyDB interface {
 
 	// Migrate runs schema migrations in order, skipping already-applied versions.
 	Migrate(ctx context.Context, migrations []Migration) error
+
+	// SetSyncScope changes the sync scope of a table.
+	// ScopeDevice (default): sync only across user's own devices.
+	// ScopeNetwork: sync to network members too.
+	// Use WithIncludeExisting(true) to also sync existing data.
+	SetSyncScope(ctx context.Context, table string, scope SyncScope, opts ...SyncScopeOption) error
 }
 
 // Note: SharedDB has been removed from the public API (Phase B).

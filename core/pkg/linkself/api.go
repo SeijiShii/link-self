@@ -11,8 +11,9 @@ import (
 
 // myDB wraps devicesync.ReplicationEngine + sqlproxy.Proxy to implement MyDB.
 type myDB struct {
-	engine *devicesync.ReplicationEngine
-	proxy  *sqlproxy.Proxy
+	engine     *devicesync.ReplicationEngine
+	proxy      *sqlproxy.Proxy
+	scopeMap   map[string]SyncScope // table -> scope
 }
 
 func (d *myDB) Put(ctx context.Context, table, recordID string, body []byte) error {
@@ -111,6 +112,31 @@ func (d *myDB) Migrate(ctx context.Context, migrations []Migration) error {
 		proxyMigrations[i] = sqlproxy.Migration{Version: m.Version, SQL: m.SQL}
 	}
 	return d.proxy.Migrate(ctx, proxyMigrations)
+}
+
+func (d *myDB) SetSyncScope(ctx context.Context, table string, scope SyncScope, opts ...SyncScopeOption) error {
+	var cfg syncScopeConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+	if d.scopeMap == nil {
+		d.scopeMap = make(map[string]SyncScope)
+	}
+	d.scopeMap[table] = scope
+	// TODO (Phase C-3): if cfg.includeExisting && scope == ScopeNetwork, dump existing data to network
+	return nil
+}
+
+// getSyncScope returns the sync scope for a table (default: ScopeDevice).
+func (d *myDB) getSyncScope(table string) SyncScope {
+	if d.scopeMap == nil {
+		return ScopeDevice
+	}
+	scope, ok := d.scopeMap[table]
+	if !ok {
+		return ScopeDevice
+	}
+	return scope
 }
 
 // sharedDB wraps groupshare.GroupShareLayer (internal mechanism, not public API).

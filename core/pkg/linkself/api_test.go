@@ -366,6 +366,84 @@ func TestMyDB_Migrate(t *testing.T) {
 	}
 }
 
+// TestMyDB_SetSyncScope_Default: Default scope is ScopeDevice.
+func TestMyDB_SetSyncScope_Default(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+
+	// SetSyncScope to ScopeDevice should succeed (it's the default, no-op).
+	err = db.SetSyncScope(ctx, "notes", ScopeDevice)
+	if err != nil {
+		t.Fatalf("SetSyncScope(ScopeDevice): %v", err)
+	}
+}
+
+// TestMyDB_SetSyncScope_Network: Set scope to ScopeNetwork.
+func TestMyDB_SetSyncScope_Network(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+
+	// SetSyncScope to ScopeNetwork should succeed.
+	err = db.SetSyncScope(ctx, "notes", ScopeNetwork)
+	if err != nil {
+		t.Fatalf("SetSyncScope(ScopeNetwork): %v", err)
+	}
+}
+
+// TestMyDB_SetSyncScope_WithIncludeExisting: IncludeExisting option is accepted.
+func TestMyDB_SetSyncScope_WithIncludeExisting(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	db := c.MyDB()
+
+	// Put some data first
+	_ = db.Put(ctx, "notes", "n1", []byte(`{"text":"hello"}`))
+
+	// SetSyncScope with IncludeExisting should succeed.
+	err = db.SetSyncScope(ctx, "notes", ScopeNetwork, WithIncludeExisting(true))
+	if err != nil {
+		t.Fatalf("SetSyncScope with IncludeExisting: %v", err)
+	}
+}
+
 // TestMyDB_DumpRestore: Dump all records, then restore to a fresh client.
 func TestMyDB_DumpRestore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
