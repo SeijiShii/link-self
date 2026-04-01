@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/SeijiShii/link-self/core/internal/dataroot"
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
 	"github.com/SeijiShii/link-self/core/internal/did"
 	"github.com/SeijiShii/link-self/core/internal/envelope"
@@ -132,8 +133,22 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 			return n.SendToPeerID(ctx, pid, wrapped)
 		},
 	}
-	// Wire SQL proxy (in-memory for now; Phase 3 will use dataroot paths).
-	proxy, err := sqlproxy.Open(":memory:")
+	// Wire SQL proxy: use dataroot path if SuiteID is set, otherwise in-memory.
+	sqlPath := ":memory:"
+	if config.SuiteID != "" {
+		root, err := dataroot.DefaultRoot()
+		if err != nil {
+			n.Close()
+			return nil, fmt.Errorf("resolve data root: %w", err)
+		}
+		suiteDir := dataroot.SuiteDir(root, identity.DID, config.SuiteID)
+		if err := os.MkdirAll(suiteDir, 0700); err != nil {
+			n.Close()
+			return nil, fmt.Errorf("create suite dir: %w", err)
+		}
+		sqlPath = filepath.Join(suiteDir, "data.db")
+	}
+	proxy, err := sqlproxy.Open(sqlPath)
 	if err != nil {
 		n.Close()
 		return nil, fmt.Errorf("open sql proxy: %w", err)

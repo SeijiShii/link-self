@@ -477,6 +477,67 @@ func TestMyDB_SQLWrite_SyncsViaDeviceSync(t *testing.T) {
 	}
 }
 
+// TestClient_Start_WithSuiteID: SuiteID creates storage in suite directory.
+func TestClient_Start_WithSuiteID(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dataDir := t.TempDir()
+	t.Setenv("LINKSELF_DATA_DIR", dataDir)
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+		SuiteID:      "com.example.notes",
+	}
+	info, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	// Verify we can use SQL (proves SQLite was opened at a real path).
+	db := c.MyDB()
+	_, err = db.Exec(ctx, `CREATE TABLE t (id TEXT PRIMARY KEY)`)
+	if err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+
+	// Verify the suite directory was created under the data root.
+	// Path: <dataDir>/<encodedDID>/suites/com.example.notes/
+	did := info.DID
+	entries, _ := filepath.Glob(filepath.Join(dataDir, "*", "suites", "com.example.notes"))
+	if len(entries) == 0 {
+		t.Errorf("suite directory not found for DID %s under %s", did, dataDir)
+	}
+}
+
+// TestClient_Start_WithoutSuiteID: No SuiteID uses in-memory storage.
+func TestClient_Start_WithoutSuiteID(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	config := Config{
+		IdentityPath: filepath.Join(t.TempDir(), "identity.json"),
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+		// No SuiteID — should still work (in-memory).
+	}
+	_, err := c.Start(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop(ctx)
+
+	// Should still work with in-memory DB.
+	db := c.MyDB()
+	_, err = db.Exec(ctx, `CREATE TABLE t (id TEXT PRIMARY KEY)`)
+	if err != nil {
+		t.Fatalf("Exec without SuiteID: %v", err)
+	}
+}
+
 // TestMyDB_DumpRestore: Dump all records, then restore to a fresh client.
 func TestMyDB_DumpRestore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

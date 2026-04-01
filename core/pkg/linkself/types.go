@@ -145,6 +145,12 @@ type Config struct {
 	// ChangeLogRetention configures ChangeLog pruning policy.
 	// If nil, defaults to TimeBased with 30 days.
 	ChangeLogRetention *ChangeLogRetention
+
+	// SuiteID identifies the application suite (e.g. "com.example.notes").
+	// When set, LinkSelf stores data at a path determined by dataroot:
+	//   <root>/<encodedDID>/suites/<suiteID>/data.db
+	// When empty, an in-memory database is used.
+	SuiteID string
 }
 
 // NodeInfo contains information about a started node.
