@@ -37,6 +37,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/SeijiShii/link-self/core/internal/role"
 )
 
 // Config holds configuration for creating a LinkSelf node.
@@ -86,10 +88,16 @@ type Config struct {
 	// StorageBackend selects the storage implementation for all internal stores.
 	// Use MemoryBackend() for ephemeral in-memory storage (default when nil).
 	// Use SQLiteBackend(path) for persistent SQLite3 storage.
-	//
-	// StorageBackend は、すべての内部ストレージの実装を選択します。
-	// nil の場合は MemoryBackend() がデフォルトとして使用されます。
 	StorageBackend StorageBackend
+
+	// Roles defines the role hierarchy (DAG) for this suite.
+	// Keys are role names, values define which roles they include.
+	// If nil, an empty DAG is used (only "members" permission works).
+	Roles role.RoleDefs
+
+	// AdminRole is the role name required for network management operations
+	// (add member, kick, set role). Defaults to "admin" if empty.
+	AdminRole string
 }
 
 // NodeInfo contains information about a started node.

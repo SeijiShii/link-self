@@ -2,8 +2,8 @@ package linkself
 
 import (
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
-	"github.com/SeijiShii/link-self/core/internal/group"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
+	"github.com/SeijiShii/link-self/core/internal/network"
 	"github.com/SeijiShii/link-self/core/internal/storage/sqlite"
 )
 
@@ -24,7 +24,7 @@ type backendStorages struct {
 	deviceStorage     devicesync.DeviceStorage
 	sharedStorage     groupshare.SharedStorage
 	subscriptionStore groupshare.SubscriptionStore
-	groupStore        group.Store
+	networkStore      network.Store
 }
 
 // --- Memory backend ---
@@ -43,7 +43,7 @@ func (m *memoryBackend) storages() backendStorages {
 		deviceStorage:     devicesync.NewMemStorage(),
 		sharedStorage:     groupshare.NewMemSharedStorage(),
 		subscriptionStore: groupshare.NewMemSubscriptionStore(),
-		groupStore:        group.NewMemStore(),
+		networkStore:      network.NewMemStore(),
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *sqliteBackend) storages() backendStorages {
 		deviceStorage:     s.db.DeviceStorage(),
 		sharedStorage:     s.db.SharedStorage(),
 		subscriptionStore: s.db.SubscriptionStore(),
-		groupStore:        s.db.GroupStore(),
+		networkStore:      network.NewMemStore(), // TODO(phase2.6): replace with s.db.NetworkStore()
 	}
 }
 

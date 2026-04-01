@@ -10,8 +10,9 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
 	"github.com/SeijiShii/link-self/core/internal/did"
 	"github.com/SeijiShii/link-self/core/internal/envelope"
-	"github.com/SeijiShii/link-self/core/internal/group"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
+	"github.com/SeijiShii/link-self/core/internal/network"
+	"github.com/SeijiShii/link-self/core/internal/role"
 	"github.com/SeijiShii/link-self/core/internal/node"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -133,18 +134,33 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 	}
 	c.myDB = &myDB{engine: dsEngine}
 
-	// Wire Group layer.
-	groupStore := stores.groupStore
-	groupService := group.NewService(groupStore)
+	// Wire Network layer with role DAG.
+	netStore := stores.networkStore
+	var dag *role.DAG
+	if config.Roles != nil {
+		var err error
+		dag, err = role.NewDAG(config.Roles)
+		if err != nil {
+			n.Close()
+			return nil, fmt.Errorf("build role DAG: %w", err)
+		}
+	} else {
+		dag, _ = role.NewDAG(role.RoleDefs{})
+	}
+	adminRole := config.AdminRole
+	if adminRole == "" {
+		adminRole = "admin"
+	}
+	netService := network.NewService(netStore, dag, adminRole)
 	c.network = &networkAPI{
-		service: groupService,
-		store:   groupStore,
+		service: netService,
+		store:   netStore,
 		selfDID: identity.DID,
 	}
 
 	// Wire GroupShare layer.
 	gsStorage := stores.sharedStorage
-	gsResolver := &memberResolverAdapter{store: groupStore, selfDID: identity.DID}
+	gsResolver := &memberResolverAdapter{store: netStore, selfDID: identity.DID}
 	gsLayer := groupshare.NewGroupShareLayer(
 		gsStorage,
 		gsResolver,

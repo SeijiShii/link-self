@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/SeijiShii/link-self/core/internal/devicesync"
-	"github.com/SeijiShii/link-self/core/internal/group"
 	"github.com/SeijiShii/link-self/core/internal/groupshare"
+	"github.com/SeijiShii/link-self/core/internal/network"
 )
 
 // myDB wraps devicesync.ReplicationEngine to implement DeviceDB.
@@ -198,19 +198,33 @@ func (g *sharedDB) Restore(ctx context.Context, records []*SharedRecord) (int, e
 	return g.layer.Restore(ctx, internal)
 }
 
-// networkAPI wraps group.Service + group.Store to implement GroupAPI.
+// networkAPI wraps network.Service + network.Store to implement NetworkAPI.
 type networkAPI struct {
-	service *group.Service
-	store   group.Store
+	service *network.Service
+	store   network.Store
 	selfDID string
 }
 
 func (g *networkAPI) CreateGroup(ctx context.Context, memberDIDs []string) (string, error) {
-	return g.service.CreateGroup(memberDIDs, []string{g.selfDID})
+	// Create network with self as creator (gets admin role).
+	// Then add remaining members.
+	id, err := g.service.Create("", g.selfDID)
+	if err != nil {
+		return "", err
+	}
+	for _, did := range memberDIDs {
+		if did == g.selfDID {
+			continue
+		}
+		if err := g.service.AddMember(id, g.selfDID, did, ""); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
 }
 
 func (g *networkAPI) AddMember(ctx context.Context, groupID, memberDID string) error {
-	return g.service.AddMember(groupID, memberDID)
+	return g.service.AddMember(groupID, g.selfDID, memberDID, "")
 }
 
 func (g *networkAPI) Leave(ctx context.Context, groupID string) error {
@@ -218,22 +232,25 @@ func (g *networkAPI) Leave(ctx context.Context, groupID string) error {
 }
 
 func (g *networkAPI) ListGroups(ctx context.Context) ([]string, error) {
-	return g.store.ListGroupIDsForMember(g.selfDID)
+	return g.store.ListForMember(g.selfDID)
 }
 
-// memberResolverAdapter adapts group.Store to groupshare.MemberResolver.
+// memberResolverAdapter adapts network.Store to groupshare.MemberResolver.
 type memberResolverAdapter struct {
-	store   group.Store
+	store   network.Store
 	selfDID string
 }
 
 func (r *memberResolverAdapter) MemberDIDsForGroup(ctx context.Context, groupID string) ([]string, error) {
-	g, err := r.store.GetGroup(groupID)
+	n, err := r.store.GetNetwork(groupID)
 	if err != nil {
 		return nil, err
 	}
+	if n == nil {
+		return nil, nil
+	}
 	var members []string
-	for _, m := range g.Members {
+	for _, m := range n.Members {
 		if m != r.selfDID {
 			members = append(members, m)
 		}
