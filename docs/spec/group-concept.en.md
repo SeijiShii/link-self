@@ -79,7 +79,7 @@
 
 - **Phase 1 design** ([phase1-design.en.md](phase1-design.en.md)): Group is in Phase 1 scope. Send/connect APIs are group-based (SendToGroup / ConnectToGroup).
 - **Sync DB plan** ([sync-db-plan.en.md](sync-db-plan.en.md)): Synced groups are “groupId → member DID list”; aligned with the group concept.
-- **Sample chat app plan** ([sample-chat-app-plan.en.md](sample-chat-app-plan.en.md)): Uses SendToGroup / ConnectToGroup for the 2-person group case.
+- **Sample chat app plan** ([sample-chat-app-plan.en.md](../app/sample-chat-app-plan.en.md)): Uses SendToGroup / ConnectToGroup for the 2-person group case.
 
 ---
 

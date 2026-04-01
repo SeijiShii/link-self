@@ -10,7 +10,7 @@
 
 ### 1.1 ストレージプロキシとしての位置づけ
 
-> **注意（2026-04）:** 本セクションはストレージプロキシモデルに基づいて更新された。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+> **注意（2026-04）:** 本セクションはストレージプロキシモデルに基づいて更新された。詳細は [データ同期コンセプト](data-sync-concept.md) を参照。
 
 LinkSelf はアプリから見た**ストレージそのもの**として機能する。アプリは SQL クエリを発行するだけで、データの同期・永続化・競合解決はすべて LinkSelf が透過的に処理する。
 
@@ -31,13 +31,13 @@ DeviceSync / GroupShare は、この透過的な同期を実現するための**
 
 ### 1.3 API 統合方針（2026-04）
 
-> **参照:** [データ同期コンセプト §15](../chat-client/docs/wants/data-sync-concept.md)
+> **参照:** [データ同期コンセプト §15](data-sync-concept.md)
 
 アプリ向け公開 API は **MyDB に統合**する。MyDB が SQL クエリインターフェース（Exec/Query/Migrate）をサポートし、テーブル単位の同期スコープ設定により DeviceSync / GroupShare を内部で自動的に使い分ける。従来の `DB()` および `SharedDB()` は公開 API から廃止する。
 
 ### 1.4 ユーザー鍵 / デバイス鍵の2層構造（2026-04）
 
-> **参照:** [データ同期コンセプト §5.1](../chat-client/docs/wants/data-sync-concept.md)
+> **参照:** [データ同期コンセプト §5.1](data-sync-concept.md)
 
 DeviceSync の「同一 DID = 同一秘密鍵」という前提を改める。各デバイスは固有のデバイス DID を持ち、ネットワークに公開されるユーザー DID は全デバイスで共有する。ペアリングプロトコル（QR + 時間制限トークン）でユーザー鍵を安全に転送する。
 
@@ -289,14 +289,14 @@ type GroupShareLayer struct {
 - **権限**: GroupShare の AccessPolicy / SchemaValidator はアプリ層が実装。LinkSelf は抽象インターフェースのみ提供
 - **グループ**: group パッケージは変更なし。GroupShare のみが利用する。DeviceSync はグループ概念を使わない
 - **ストレージ**: 全てインターフェース化。ストレージのパスは LinkSelf が DID 空間・SuiteID・ネットワークインスタンスに基づいて自動決定する。データストア実装は LinkSelf が完全に内包し、個別インターフェースの外部注入は行わない。アプリはストレージの配置にも実装にも関与しない
-- **公開 API**: `client.MyDB()` が唯一の公開 API。SQL クエリインターフェース（`Exec()` / `Query()`）を提供する。現行の Put/Get は内部実装として残る。詳細は [データ同期コンセプト §15](../chat-client/docs/wants/data-sync-concept.md) を参照
+- **公開 API**: `client.MyDB()` が唯一の公開 API。SQL クエリインターフェース（`Exec()` / `Query()`）を提供する。現行の Put/Get は内部実装として残る。詳細は [データ同期コンセプト §15](data-sync-concept.md) を参照
 - **ChangeLog 保持**: 時間ベース（デフォルト30日）/ 件数ベース（デフォルト10000件）で設定可能。不足時は自動全同期にフォールバック（権限確認付き）
 
 ---
 
 ## 9. 用語の進化（2026-04）
 
-> **参照:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md)
+> **参照:** [データ同期コンセプト](data-sync-concept.md)
 
 公開 API の名称を以下のように進化させる。内部パッケージ名（`devicesync`, `groupshare`）は変更しない。
 
@@ -306,11 +306,11 @@ type GroupShareLayer struct {
 | GroupShare / GroupShareAPI / SharedDB | 公開 API から廃止 | 内部メカニズムに格下げ。アプリからは見えない |
 | GroupAPI / group パッケージ | **NetworkAPI** | グループ → ネットワーク管理に改名。オーナー概念はロール DAG に吸収（§9.1 参照） |
 
-また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入。**ユーザー DID** と **デバイス DID** の2層構造（§1.4）も導入。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+また、**Suite（スイート）** と **Network（ネットワークインスタンス）** の2層概念を導入。**ユーザー DID** と **デバイス DID** の2層構造（§1.4）も導入。詳細は [データ同期コンセプト](data-sync-concept.md) を参照。
 
 ### 9.1 オーナー概念のロール DAG への吸収
 
-[グループの概念](group-concept.md) で定義されていたオーナー（Owners フィールド）は、[データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) のロール DAG に吸収する。
+[グループの概念](group-concept.md) で定義されていたオーナー（Owners フィールド）は、[データ同期コンセプト](data-sync-concept.md) のロール DAG に吸収する。
 
 - group パッケージの `Owners []string` フィールドは廃止予定
 - キック・招待等の管理操作の権限は、スイートのロール定義で決める（例: admin ロールのみ）

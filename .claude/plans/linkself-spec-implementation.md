@@ -375,7 +375,7 @@ Phase E (ユーザー鍵/デバイス鍵)
 
 ## Decision References
 
-- [data-sync-concept.md](chat-client/docs/wants/data-sync-concept.md) — 仕様本体
-- [data-sync-decisions.md §4](chat-client/docs/wants/data-sync-decisions.md) — 個人マルチデバイス精査による設計変更
-- [sync-db-plan.md §1.3-1.4](docs/sync-db-plan.md) — API統合方針、2層鍵方針
-- [dump-restore-retention.md §11](docs/dump-restore-retention.md) — ChangeLog保持ポリシー + 全同期フォールバック
+- [data-sync-concept.md](docs/spec/data-sync-concept.md) — 仕様本体
+- [data-sync-decisions.md §4](docs/spec/data-sync-decisions.md) — 個人マルチデバイス精査による設計変更
+- [sync-db-plan.md §1.3-1.4](docs/spec/sync-db-plan.md) — API統合方針、2層鍵方針
+- [dump-restore-retention.md §11](docs/spec/dump-restore-retention.md) — ChangeLog保持ポリシー + 全同期フォールバック

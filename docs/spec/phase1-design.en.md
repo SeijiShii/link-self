@@ -117,4 +117,4 @@ Phase 2 (infrastructure module, sample apps) will extend the Phase 1 `core` modu
 
 - [Group concept](group-concept.en.md): Group, owner, leave, permissions.
 - [Sync DB plan](sync-db-plan.en.md): Treating the network as a DB from the app.
-- [Sample chat app plan](sample-chat-app-plan.en.md): Sample app design using group APIs.
+- [Sample chat app plan](../app/sample-chat-app-plan.en.md): Sample app design using group APIs.

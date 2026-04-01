@@ -47,7 +47,7 @@
 
 ---
 
-> **注意（2026-04）:** オーナー概念は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) のロール DAG に吸収予定。`Owners` フィールドは廃止し、キック・招待等の管理操作の権限はスイートのロール定義（例: admin ロール）で決める方針に移行する。以下の §4〜§5 は現行実装の記録として残す。
+> **注意（2026-04）:** オーナー概念は [データ同期コンセプト](data-sync-concept.md) のロール DAG に吸収予定。`Owners` フィールドは廃止し、キック・招待等の管理操作の権限はスイートのロール定義（例: admin ロール）で決める方針に移行する。以下の §4〜§5 は現行実装の記録として残す。
 
 ## 4. オーナー（管理者）
 
@@ -94,7 +94,7 @@
 
 - **Phase 1 設計** ([phase1-design.md](phase1-design.md)): グループは Phase 1 のスコープに含む。送信・接続 API はグループ単位（SendToGroup / ConnectToGroup）を想定。
 - **分散ネットワーク DB 化** ([sync-db-plan.md](sync-db-plan.md)): 同期対象のグループは「groupId に紐づくメンバー DID のリスト」として扱う。グループ概念と整合する。
-- **サンプルチャット** ([sample-chat-app-plan.md](sample-chat-app-plan.md)): 2 人グループのケースで SendToGroup / ConnectToGroup を利用する想定。
+- **サンプルチャット** ([sample-chat-app-plan.md](../app/sample-chat-app-plan.md)): 2 人グループのケースで SendToGroup / ConnectToGroup を利用する想定。
 
 ---
 

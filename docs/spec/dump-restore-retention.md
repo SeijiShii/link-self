@@ -344,7 +344,7 @@ Restore(ctx context.Context, records []*Record) (int, error)
 
 ## 10. スキーマ同期の保留キュー
 
-> **追加（2026-04）:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) §13.1 の補足。
+> **追加（2026-04）:** [データ同期コンセプト](data-sync-concept.md) §13.1 の補足。
 
 マイグレーションが適用できないデータ（受信側のスキーマバージョンが古い場合）は保留キューに入れる。
 
@@ -359,7 +359,7 @@ Restore(ctx context.Context, records []*Record) (int, error)
 
 ## 11. ChangeLog 保持ポリシー
 
-> **追加（2026-04）:** [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) §15 の決定事項。
+> **追加（2026-04）:** [データ同期コンセプト](data-sync-concept.md) §15 の決定事項。
 
 DeviceSync の ChangeLog は無制限に保持すると肥大化する。保持ポリシーを導入し、古いエントリを切り捨てる。
 

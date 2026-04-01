@@ -1,7 +1,7 @@
 # LinkSelf 永続化と複数アプリ共有の Phase 2 方針
 
 **概要:** LinkSelf ではユーザーが望む実存（DID）を選べる。デバイス上の保存構造は「LinkSelf データ > DID 空間 > アプリごとのデータ」とし、アプリデータはユーザーID（DID）ごとに分離する。チャットクライアントの複数インスタンス起動時も DID を選択して利用する。  
-**参照:** [sync-db 計画](sync-db-plan.md)、[サンプルチャットアプリ計画](sample-chat-app-plan.md)、[Phase 1 設計](phase1-design.md)
+**参照:** [sync-db 計画](sync-db-plan.md)、[サンプルチャットアプリ計画](../app/sample-chat-app-plan.md)、[Phase 1 設計](phase1-design.md)
 
 ---
 
@@ -34,7 +34,7 @@
 
 ## 3. 保存構造：LinkSelf データ > DID 空間 > スイート / ネットワーク / アプリごとのデータ
 
-> **注意（2026-04）:** Suite / Network の2層概念を導入。同期データ（MyDB / SharedDB）は Suite + ネットワークインスタンス単位で分離する。詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) を参照。
+> **注意（2026-04）:** Suite / Network の2層概念を導入。同期データ（MyDB / SharedDB）は Suite + ネットワークインスタンス単位で分離する。詳細は [データ同期コンセプト](data-sync-concept.md) を参照。
 
 LinkSelf が管理するデータは、次の階層で配置する。Windows では AppData などプラットフォーム標準のユーザーデータディレクトリを LinkSelf データルートとする。
 
@@ -116,7 +116,7 @@ flowchart TB
 
 ### 5.5 データ同期とストレージ
 
-> **注意（2026-04）:** 詳細は [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) および [sync-db-plan.md](sync-db-plan.md) を参照。
+> **注意（2026-04）:** 詳細は [データ同期コンセプト](data-sync-concept.md) および [sync-db-plan.md](sync-db-plan.md) を参照。
 
 LinkSelf はアプリから見た**ストレージそのもの**として機能する。アプリは SQL クエリを発行するだけで、同期・永続化・競合解決は LinkSelf が透過的に処理する。
 
@@ -127,7 +127,7 @@ LinkSelf はアプリから見た**ストレージそのもの**として機能�
 
 ---
 
-> **注意（2026-04）:** 本セクション（§6）は旧用語（groups, sync-db, DeviceDB.Put 等）を含む。実装着手時に [データ同期コンセプト](../chat-client/docs/wants/data-sync-concept.md) に基づいて改訂予定。正となる設計は §3〜§5.5 および data-sync-concept を参照。
+> **注意（2026-04）:** 本セクション（§6）は旧用語（groups, sync-db, DeviceDB.Put 等）を含む。実装着手時に [データ同期コンセプト](data-sync-concept.md) に基づいて改訂予定。正となる設計は §3〜§5.5 および data-sync-concept を参照。
 
 ## 6. 実装に必要な作業（Phase 2 で想定）
 
