@@ -339,6 +339,118 @@ func TestReplicationEngine_DefaultRetention(t *testing.T) {
 	}
 }
 
+func TestReplicationEngine_SyncWith_IncrementalSync(t *testing.T) {
+	ctx := context.Background()
+
+	// Device A has 3 entries
+	storageA := NewMemStorage()
+	engineA := &ReplicationEngine{Storage: storageA, SelfDID: "did:key:A"}
+	engineA.Put(ctx, "t", "a", []byte("1"))
+	engineA.Put(ctx, "t", "b", []byte("2"))
+	engineA.Put(ctx, "t", "c", []byte("3"))
+
+	// Device B has only the first entry (simulating partial sync)
+	storageB := NewMemStorage()
+	storageB.Put(ctx, "t", "a", []byte("1"), 1000)
+
+	// B syncs with A: B sends its latest seq, A responds with missing entries
+	var received []*ChangeEntry
+	err := engineA.SyncWith(ctx, SyncPeer{
+		LatestSeq: func(ctx context.Context) (uint64, error) {
+			return storageB.LatestSeq(ctx)
+		},
+		SendEntries: func(ctx context.Context, entries []*ChangeEntry) error {
+			received = entries
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("SyncWith: %v", err)
+	}
+
+	if len(received) != 2 {
+		t.Fatalf("expected 2 entries sent, got %d", len(received))
+	}
+	if received[0].RecordID != "b" || received[1].RecordID != "c" {
+		t.Fatalf("unexpected entries: %+v", received)
+	}
+}
+
+func TestReplicationEngine_SyncWith_GapDetected_FullSync(t *testing.T) {
+	ctx := context.Background()
+
+	// Device A has entries but has truncated old ones
+	storageA := NewMemStorage()
+	engineA := &ReplicationEngine{
+		Storage: storageA,
+		SelfDID: "did:key:A",
+		Retention: &RetentionPolicy{
+			TimeBased: false,
+			MaxCount:  2,
+		},
+	}
+	engineA.Put(ctx, "t", "a", []byte("1")) // seq=1
+	engineA.Put(ctx, "t", "b", []byte("2")) // seq=2
+	engineA.Put(ctx, "t", "c", []byte("3")) // seq=3 → truncates seq=1
+
+	// Verify truncation happened
+	minA, _ := storageA.MinSeq(ctx)
+	if minA < 2 {
+		t.Fatalf("expected MinSeq >= 2 after truncation, got %d", minA)
+	}
+
+	// Device B is far behind (seq=0, never synced)
+	var fullDump []*Record
+	err := engineA.SyncWith(ctx, SyncPeer{
+		LatestSeq: func(ctx context.Context) (uint64, error) {
+			return 0, nil // B has nothing
+		},
+		SendEntries: func(ctx context.Context, entries []*ChangeEntry) error {
+			t.Fatal("should not send incremental entries on gap")
+			return nil
+		},
+		SendFullDump: func(ctx context.Context, records []*Record) error {
+			fullDump = records
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("SyncWith: %v", err)
+	}
+
+	if len(fullDump) == 0 {
+		t.Fatal("expected full dump on gap, got none")
+	}
+}
+
+func TestReplicationEngine_SyncWith_AlreadyUpToDate(t *testing.T) {
+	ctx := context.Background()
+
+	storageA := NewMemStorage()
+	engineA := &ReplicationEngine{Storage: storageA, SelfDID: "did:key:A"}
+	engineA.Put(ctx, "t", "a", []byte("1"))
+
+	latestA, _ := storageA.LatestSeq(ctx)
+
+	var received []*ChangeEntry
+	err := engineA.SyncWith(ctx, SyncPeer{
+		LatestSeq: func(ctx context.Context) (uint64, error) {
+			return latestA, nil // B is up to date
+		},
+		SendEntries: func(ctx context.Context, entries []*ChangeEntry) error {
+			received = entries
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("SyncWith: %v", err)
+	}
+
+	if len(received) != 0 {
+		t.Fatalf("expected 0 entries when up to date, got %d", len(received))
+	}
+}
+
 func TestReplicationEngine_NoPeers(t *testing.T) {
 	ctx := context.Background()
 	storage := NewMemStorage()

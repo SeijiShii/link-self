@@ -3,6 +3,7 @@ package devicesync
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -152,10 +153,64 @@ func (r *ReplicationEngine) HandleIncoming(ctx context.Context, entry *ChangeEnt
 }
 
 // SyncWith initiates a catch-up sync with a peer device.
-// It exchanges the latest sequence number and sends/receives missing entries.
-func (r *ReplicationEngine) SyncWith(ctx context.Context, peerID string) error {
-	// TODO: implement full handshake protocol
-	return nil
+// It compares sequence numbers and sends incremental changes, or falls back
+// to a full dump if a gap is detected (peer's seq < our MinSeq).
+func (r *ReplicationEngine) SyncWith(ctx context.Context, peer SyncPeer) error {
+	peerSeq, err := peer.LatestSeq(ctx)
+	if err != nil {
+		return err
+	}
+
+	ourLatest, err := r.Storage.LatestSeq(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Already up to date
+	if peerSeq >= ourLatest {
+		if peer.SendEntries != nil {
+			return peer.SendEntries(ctx, nil)
+		}
+		return nil
+	}
+
+	// Check for gap
+	ourMin, err := r.Storage.MinSeq(ctx)
+	if err != nil {
+		return err
+	}
+
+	if ourMin > 0 && peerSeq < ourMin {
+		// Gap detected — fall back to full dump
+		if peer.SendFullDump == nil {
+			return fmt.Errorf("changelog gap detected (peer seq %d < min seq %d) and no full dump handler", peerSeq, ourMin)
+		}
+		return r.sendFullDump(ctx, peer)
+	}
+
+	// Incremental sync
+	entries, err := r.Storage.ChangesSince(ctx, peerSeq)
+	if err != nil {
+		return err
+	}
+	return peer.SendEntries(ctx, entries)
+}
+
+// sendFullDump collects all records and sends via peer.SendFullDump.
+func (r *ReplicationEngine) sendFullDump(ctx context.Context, peer SyncPeer) error {
+	tables, err := r.Storage.ListTables(ctx)
+	if err != nil {
+		return err
+	}
+	var all []*Record
+	for _, t := range tables {
+		recs, err := r.Storage.List(ctx, t)
+		if err != nil {
+			return err
+		}
+		all = append(all, recs...)
+	}
+	return peer.SendFullDump(ctx, all)
 }
 
 // broadcast sends a change entry to all peer devices.

@@ -75,6 +75,17 @@ type DeviceStorage interface {
 	TruncateChangeLog(ctx context.Context, minSeq uint64) error
 }
 
+// SyncPeer abstracts the remote peer during a SyncWith handshake.
+type SyncPeer struct {
+	// LatestSeq returns the peer's highest synced sequence number.
+	LatestSeq func(ctx context.Context) (uint64, error)
+	// SendEntries delivers incremental change entries to the peer.
+	SendEntries func(ctx context.Context, entries []*ChangeEntry) error
+	// SendFullDump delivers a full data dump to the peer (fallback when gap detected).
+	// May be nil; if nil and a gap is detected, SyncWith returns an error.
+	SendFullDump func(ctx context.Context, records []*Record) error
+}
+
 // SendFunc sends a payload to a specific peer (identified by libp2p peer ID or address).
 type SendFunc func(ctx context.Context, peerID string, payload []byte) error
 
