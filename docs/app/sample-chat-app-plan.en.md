@@ -3,7 +3,7 @@
 **English** (this page) | [日本語](sample-chat-app-plan.md)  
 **Status:** Not yet implemented (plan only, stored in docs)  
 **Summary:** Design for one full-featured sample app that **uses LinkSelf as infrastructure**: group/1-to-1 chat and P2P file sharing. Group info, contacts, sync meta, etc. are stored in **LinkSelf's DB**; the app uses LinkSelf's API.  
-**See also:** [Group concept](network-concept.en.md), [Phase 1 design](phase1-design.en.md), [Data sync design (DeviceSync / GroupShare)](sync-db-plan.en.md), [Roadmap](README.en.md#roadmap)
+**See also:** [Network concept](network-concept.en.md), [Phase 1 design](phase1-design.en.md), [Data sync design (DeviceSync / GroupShare)](sync-db-plan.en.md), [Roadmap](README.en.md#roadmap)
 
 > **Note (2026-03):** Data sync has migrated to the **DeviceSync / GroupShare two-layer architecture**. The old SyncLayer is replaced by DeviceDB + GroupShare.
 
@@ -18,7 +18,7 @@
 
 ## Conclusion
 
-- **Full-featured sample app (chat + file sharing):** Feasible. One app uses core Node API (`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`) and SyncLayer/RecordStorage as provided by LinkSelf. Treat 1-to-1 as a **2-person group** ([Group concept](network-concept.en.md)).
+- **Full-featured sample app (chat + file sharing):** Feasible. One app uses core Node API (`New`, `Start`, `SetOnMessage`, `SendToGroup`, `ConnectToGroup`) and SyncLayer/RecordStorage as provided by LinkSelf. Treat 1-to-1 as a **2-person group** ([Network concept](network-concept.en.md)).
 - **Multiple nodes on one PC:** Possible. **One process = one node**; run the same binary multiple times (multiple terminals) on the same PC to simulate multiple nodes. Integration tests [core/test/integration/integration_test.go](../core/test/integration/integration_test.go) already run multiple nodes (different ports) on the same host and verify DHT, auth, and messages.
 
 ---
@@ -96,6 +96,6 @@
 
 ## Related documents
 
-- [Group concept](network-concept.en.md): Group, owner, leave, permissions.
+- [Network concept](network-concept.en.md): Network, role DAG, leave, permissions.
 - [Phase 1 design](phase1-design.en.md): Core scope and API approach.
 - [Sync DB plan](sync-db-plan.en.md): Treating the network as a DB.

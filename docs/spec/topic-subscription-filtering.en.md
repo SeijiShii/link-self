@@ -1,7 +1,7 @@
 # Topic-Based Subscription Filtering
 
 [日本語](topic-subscription-filtering.md) | **English** (this page)
-**See also:** [Data Sync Design (DeviceSync / GroupShare)](sync-db-plan.en.md), [Group Concept](network-concept.en.md)
+**See also:** [Data Sync Design (DeviceSync / GroupShare)](sync-db-plan.en.md), [Network Concept](network-concept.en.md)
 
 ---
 

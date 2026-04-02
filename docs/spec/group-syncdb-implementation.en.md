@@ -1,7 +1,7 @@
 # Group and Sync DB implementation
 
 **English** (this page) | [日本語](group-syncdb-implementation.md)  
-**See also:** [Group concept](network-concept.en.md), [Sync DB plan](sync-db-plan.en.md)
+**See also:** [Network concept](network-concept.en.md), [Sync DB plan](sync-db-plan.en.md)
 
 This document summarizes **implementation layout, APIs, and tests** in line with the above plans.
 
@@ -144,7 +144,7 @@ Run: `go test ./test/integration/... -run TestSyncDB`
 
 ## 5. Plan consistency
 
-- **group-concept:** §1–§7 (at least 2 members, leave/dissolve, owner permissions, no demote-other-owner, auto-promote when last owner, permissions at app layer) are covered by implementation and tests.
+- **group-concept:** §1–§7 (at least 2 members, leave/dissolve, owner permissions, no demote-other-owner, auto-promote when last owner, permissions at app layer) are covered by implementation and tests. **Note:** This refers to the legacy owner-based model (`core/internal/group`). The current implementation uses the role DAG model (`core/internal/network`); see [Network concept](network-concept.en.md) §4.
 - **sync-db-plan:** Meta, immediate delivery, last-write-wins, storage interface, groupId → member DIDs (via group.Store), use of SendToGroup/SetOnMessage are implemented. SQLite reference and schema conventions are not (per plan, app or separate task).
 
 This document aligns the plans with the implementation and tests.

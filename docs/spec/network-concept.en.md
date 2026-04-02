@@ -1,26 +1,24 @@
-# Group concept
+# Network concept
 
 **English** (this page) | [日本語](network-concept.md)  
-**See also:** [Phase 1 design](phase1-design.en.md), [Sync DB plan](sync-db-plan.en.md)
+**See also:** [Phase 1 design](phase1-design.en.md), [Sync DB plan](sync-db-plan.en.md), [Data sync concept](data-sync-concept.en.md)
 
 ---
 
 ## 1. Overview
 
-- **Group** = a set of members (DIDs). **At least 2 members**.
-- **1-to-1** is treated as a “2-person group”; there is no dedicated 1-to-1 concept.
-- Group member list and owner information are stored **locally on each node** (no group entity on the DHT).
-- **Edit/view permissions** and similar are handled at the **application layer**, not by the network group concept. The core group handles only “who is a member” and “who is an owner”; the app defines permission details.
+- **Network** = a set of members (DIDs). **At least 1 member** (can be used as a personal data space).
+- **1-to-1** is treated as a "2-person network"; there is no dedicated 1-to-1 concept.
+- Network member lists and role information are stored **locally on each node** (no network entity on the DHT).
+- **Access control** is managed through a role DAG (directed acyclic graph). The app provides role definitions, and LinkSelf enforces role-based access control.
 
 ---
 
-## 2. Where group information (groups I belong to) is stored
+## 2. Where network information is stored
 
-- **Provided as infrastructure.** Storage of group information (list of groups I belong to, member DIDs per group, owner info) is **interface-based**; the implementation lives in the infrastructure. **Eventually implemented with SQLite3 etc., but callers depend only on the interface.**
-- **Interface:** Define operations for listing/adding/updating/deleting groups and for getting/storing “groupId → member DID list, owner info.” Core, sync layer, and app access group information only through this interface.
-- **Implementation:** The infrastructure includes a **default implementation using SQLite3**. Schema (group table, members, owners) is defined in the infrastructure or documented as a convention. The app may use this implementation as-is or inject an implementation that satisfies the interface (in-memory for tests, another DB, etc.).
-- **Storage location:** Local to each device (node). No central server or DHT holds the group entity (Phase 1 assumption). For the SQLite3 implementation, use an app-specified DB path (or a default path).
-- **Benefits:** (1) Interface allows tests to use mocks or in-memory implementations. (2) Changing the persistence backend (different DB, encryption layer, etc.) is a matter of swapping the implementation. (3) Core and sync layer do not depend on group persistence details.
+- Network information (member DID list, role assignments) is managed via the interface-based `network.Store`.
+- Default implementations: in-memory (`MemStore`) and SQLite3.
+- Stored locally on each device; no central server or DHT holds the network entity.
 
 ---
 
@@ -28,63 +26,108 @@
 
 | Item | Description |
 |------|-------------|
-| **Members** | List of DIDs in the group. At least 2. |
-| **Leave** | A member may **leave** the group at any time. |
-| **2-person group** | When there are 2 members, if one leaves the group is **dissolved**. |
+| **Members** | List of DIDs in the network. At least 1. |
+| **Leave** | A member may leave the network at any time. |
+| **1-person network** | A single-member network functions as a personal data space. |
+| **2-person network** | When one of two members leaves, the network becomes a 1-person network. |
 
 ---
 
-## 4. Owner (administrator)
+## 4. Role DAG (access control)
 
-| Item | Description |
-|------|-------------|
-| **Owner** | A group has the concept of **owner** (administrator). |
-| **2-person case** | For 2 members, the owner concept may be **hidden** (if one leaves the group dissolves, so no need to distinguish in practice). |
-| **When inviting a 3rd** | When inviting a 3rd member, decide **which of the first two (or both)** become owners. |
+The owner concept is **unified into the role DAG**. The role DAG is used for **both network management and table permissions**.
 
-### Owner permissions
+### Scope of the role DAG
 
-| Permission | Description |
-|------------|-------------|
-| **Remove member** | Owner may remove a member (kick). |
-| **Appoint owner** | Owner may appoint another member as owner. |
-| **Self-demote** | Owner may demote themselves to member. |
-| **Demote other owner** | Owner **cannot demote another owner**. |
+> **Important:** The role DAG is used not only for network management operations but also for table-level (MyDB) access control.
+
+| Scope | Description | Implementation |
+|-------|-------------|----------------|
+| **Network management** | Permission checks for adding/kicking members and changing roles | `network.Service` |
+| **Table permissions** | Resolving role names in read/write/delete permissions | `permission.Check` → `DAG.HasRole` |
+
+If a table permission specifies a role name (e.g. `"nurse"`) that is not defined in the DAG, access is **always denied**.
+
+### When `Config.Roles` is nil
+
+Setting `Roles: nil` creates an empty DAG. Behavior of each permission value with an empty DAG:
+
+| Permission value | Behavior | Reason |
+|-----------------|----------|--------|
+| `nil` (Permissions struct itself is nil) | Allow all | DAG is not consulted |
+| `"members"` | Allow all members | Special value; bypasses DAG |
+| `"self"` / `"owner"` | Resolved by caller | Does not go through DAG |
+| Role names (e.g. `"nurse"`) | **Always denied** | No role definitions in empty DAG |
+| `""` (empty string) | Denied | Empty string means operation not allowed |
+
+**Conclusion:** When running with `Roles: nil`, only `"members"` / `"self"` / `"owner"` can be used for table permissions. If fine-grained role-based access control is needed, `Config.Roles` must be configured.
+
+### Role definitions
+
+The app defines the role hierarchy via `Config.Roles`:
+
+```go
+Roles: role.RoleDefs{
+    "viewer":     {},                              // base role
+    "nurse":      {Includes: []string{"viewer"}},  // includes viewer's permissions
+    "admin":      {Includes: []string{"nurse"}},   // includes nurse's permissions
+}
+```
+
+Roles form a directed acyclic graph (DAG); `Includes` defines containment relationships. Cyclic references cause an error.
+
+### Management operation permissions
+
+| Operation | Required role |
+|-----------|--------------|
+| Add member | `Config.AdminRole` (default: "admin") |
+| Kick member | `Config.AdminRole` |
+| Change role assignment | `Config.AdminRole` |
+| Leave | Anyone (self only) |
+
+### Role assignment to members
+
+- 1 member = 1 role. To combine multiple roles, define a composite role in the DAG.
+- Members without an assigned role have minimal permissions (`members` permission only).
 
 ---
 
-## 5. When the last owner demotes or leaves
+## 5. Table permissions and sync scope
 
-- When the **last** owner **self-demotes** or **leaves**, there would be 0 owners.
-- In that case **automatically promote at least one of the remaining members to owner** (never leave the group with 0 owners).
+Table-level permission settings determine the data sync scope:
 
-### How to choose the new owner(s)
+| read permission | Sync scope | DAG required |
+|----------------|------------|-------------|
+| `self` | Between the same user's devices only | No |
+| `members` | Distributed to all network members | No |
+| `<role_name>` | Distributed only to members with the required role or above | **Yes** |
 
-| Method | Description |
-|--------|-------------|
-| **Arbitrary** | Choose from remaining members by any rule (e.g. nomination, join order). Prefer not to promote only “the last one” (e.g. if 2+ remain, promote 2). |
-| **Random** | Pick one of the remaining members at random as owner. |
+> **Note:** When using `<role_name>`, the role must be defined in `Config.Roles` (see §4).
+
+For details, see [Data sync concept §6](data-sync-concept.en.md).
 
 ---
 
-## 6. Permissions are application-layer
+## 6. Permissions are defined by the app layer
 
-- **Document edit/view** and resource-level access control are done at the **application layer**, not by the network group concept.
-- The core group handles only the **group lifecycle**: members, owners, leave, dissolve, invite, kick.
-- The app layers its own permission model (editable / view-only, per-document, etc.) on top of the group (members, owners).
+- Role definitions are hardcoded by the app. LinkSelf does not know "what a role means."
+- Table-level read/write/delete permissions are set via `MyDB.SetPermissions()`.
+- Row-level access control is not provided by LinkSelf. The app controls it with WHERE clauses.
 
 ---
 
 ## 7. Relation to other documents
 
-- **Phase 1 design** ([phase1-design.en.md](phase1-design.en.md)): Group is in Phase 1 scope. Send/connect APIs are group-based (SendToGroup / ConnectToGroup).
-- **Sync DB plan** ([sync-db-plan.en.md](sync-db-plan.en.md)): Synced groups are “groupId → member DID list”; aligned with the group concept.
-- **Sample chat app plan** ([sample-chat-app-plan.en.md](../app/sample-chat-app-plan.en.md)): Uses SendToGroup / ConnectToGroup for the 2-person group case.
+- **Phase 1 design** ([phase1-design.en.md](phase1-design.en.md)): Network is in Phase 1 scope.
+- **Sync DB plan** ([sync-db-plan.en.md](sync-db-plan.en.md)): DeviceSync / GroupShare two-layer architecture.
+- **Data sync concept** ([data-sync-concept.en.md](data-sync-concept.en.md)): Suite / Network two-layer concept, permission model, SQL interface.
+- **Sample chat app** ([sample-chat-app-plan.en.md](../app/sample-chat-app-plan.en.md)): Sample app design.
 
 ---
 
-## 8. Implementation and tests
+## 8. Implementation
 
-- **Implementation:** [core/internal/group](../core/internal/group). Store is defined by the `Store` interface; in-memory implementation `NewMemStore` is included. Domain logic is in `Service` (`CreateGroup`, `Leave`, `Kick`, `AppointOwner`, `SelfDemote`, `DemoteOwner`). SQLite3 implementation is not yet provided (can be added later as infrastructure).
-- **Tests:** Store unit tests (`store_test.go`: Create/Get/List/Update/Delete/GetNotFound/unique ID), domain unit tests (`group_test.go`: member count, leave, dissolve, owner permissions, no demote-other-owner, auto-promote when last owner leaves).
-- **Details:** See “1. Group” in [Group and Sync DB implementation](group-syncdb-implementation.en.md).
+- **Implementation**: `core/internal/network`. Store is defined by the `Store` interface; in-memory (`MemStore`) and SQLite implementations are included.
+- **Domain logic**: `Service` (`Create`, `AddMember`, `Leave`, `Kick`, `SetMemberRole`). All management operations perform `AdminRole` role DAG permission checks.
+- **Legacy**: `core/internal/group` is the old owner-based implementation. `core/internal/network` is the successor.
+- **Tests**: Store unit tests, service unit tests (including role permission checks).
