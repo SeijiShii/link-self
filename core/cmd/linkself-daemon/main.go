@@ -211,6 +211,12 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGroupsLeave(req)
 	case "network.list":
 		handleGroupsList(req)
+	case "generateTestDID":
+		handleGenerateTestDID(req)
+	case "injectTestMessage":
+		handleInjectTestMessage(req)
+	case "dangerouslyDeleteAllData":
+		handleDangerouslyDeleteAllData(req)
 	case "mydb.exec":
 		handleDBExec(req)
 	case "mydb.query":
@@ -368,6 +374,51 @@ func requireClient(req *JSONRPCRequest) bool {
 		return false
 	}
 	return true
+}
+
+// --- Test data injection handlers ---
+
+func handleGenerateTestDID(req *JSONRPCRequest) {
+	did, err := linkself.GenerateTestDID()
+	if err != nil {
+		sendError(req.ID, -32000, "generateTestDID failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]string{"did": did})
+}
+
+type InjectTestMessageParams struct {
+	FromDID string `json:"fromDID"`
+	Payload string `json:"payload"`
+}
+
+func handleInjectTestMessage(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params InjectTestMessageParams
+	if !parseParams(req, &params) {
+		return
+	}
+	if err := linkSelfClient.InjectTestMessage(ctx, params.FromDID, []byte(params.Payload)); err != nil {
+		sendError(req.ID, -32000, "injectTestMessage failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, nil)
+}
+
+// --- DangerouslyDeleteAllData handler ---
+
+func handleDangerouslyDeleteAllData(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	if err := linkSelfClient.DangerouslyDeleteAllData(ctx); err != nil {
+		sendError(req.ID, -32000, "dangerouslyDeleteAllData failed", err.Error())
+		return
+	}
+	linkSelfClient = nil
+	sendResponse(req.ID, nil)
 }
 
 // --- DeviceDB handlers ---

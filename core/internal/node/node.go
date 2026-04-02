@@ -146,6 +146,17 @@ func (n *Node) SetOnMessage(fn func(peerDID string, payload []byte)) {
 	n.router.OnMessage = fn
 }
 
+// DispatchMessage invokes the onMessage handler directly without a P2P connection.
+// Used by InjectTestMessage for development/testing.
+func (n *Node) DispatchMessage(peerDID string, payload []byte) {
+	n.mu.Lock()
+	fn := n.onMessage
+	n.mu.Unlock()
+	if fn != nil {
+		fn(peerDID, payload)
+	}
+}
+
 // SetOnDeviceSync sets a callback for DeviceSync messages.
 func (n *Node) SetOnDeviceSync(fn func(peerDID string, payload []byte)) {
 	n.mu.Lock()

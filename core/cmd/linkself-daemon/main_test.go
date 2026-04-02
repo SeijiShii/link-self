@@ -155,7 +155,108 @@ func TestDaemonJSONRPC(t *testing.T) {
 		}
 	})
 
-	// Test 3: Stop the daemon
+	// Test 3: GenerateTestDID
+	t.Run("GenerateTestDID", func(t *testing.T) {
+		req := JSONRPCRequest{
+			JSONRPC: "2.0",
+			Method:  "generateTestDID",
+			ID:      10,
+		}
+
+		reqJSON, _ := json.Marshal(req)
+		if _, err := stdin.Write([]byte(string(reqJSON) + "\n")); err != nil {
+			t.Fatalf("Failed to write request: %v", err)
+		}
+
+		select {
+		case resp := <-responseChan:
+			if resp.Error != nil {
+				t.Fatalf("generateTestDID failed: %v", resp.Error)
+			}
+			resultBytes, _ := json.Marshal(resp.Result)
+			var result map[string]string
+			if err := json.Unmarshal(resultBytes, &result); err != nil {
+				t.Fatalf("Failed to parse result: %v", err)
+			}
+			did := result["did"]
+			if !strings.HasPrefix(did, "did:test:") {
+				t.Errorf("expected did:test: prefix, got %q", did)
+			}
+			t.Logf("Generated test DID: %s", did)
+
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for generateTestDID response")
+		}
+	})
+
+	// Test 4: InjectTestMessage
+	t.Run("InjectTestMessage", func(t *testing.T) {
+		req := JSONRPCRequest{
+			JSONRPC: "2.0",
+			Method:  "injectTestMessage",
+			Params: map[string]string{
+				"fromDID": "did:test:0000000000000001",
+				"payload": "hello from test",
+			},
+			ID: 11,
+		}
+
+		reqJSON, _ := json.Marshal(req)
+		if _, err := stdin.Write([]byte(string(reqJSON) + "\n")); err != nil {
+			t.Fatalf("Failed to write request: %v", err)
+		}
+
+		select {
+		case resp := <-responseChan:
+			if resp.Error != nil {
+				t.Fatalf("injectTestMessage failed: %v", resp.Error)
+			}
+			t.Log("injectTestMessage succeeded")
+
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for injectTestMessage response")
+		}
+	})
+
+	// Test 5: InjectTestMessage rejects real DID
+	t.Run("InjectTestMessage_rejects_real_DID", func(t *testing.T) {
+		req := JSONRPCRequest{
+			JSONRPC: "2.0",
+			Method:  "injectTestMessage",
+			Params: map[string]string{
+				"fromDID": "did:key:z6MkpTHR8VNs5fA2",
+				"payload": "should fail",
+			},
+			ID: 12,
+		}
+
+		reqJSON, _ := json.Marshal(req)
+		if _, err := stdin.Write([]byte(string(reqJSON) + "\n")); err != nil {
+			t.Fatalf("Failed to write request: %v", err)
+		}
+
+		// Drain responses until we get one with matching ID (skip notifications).
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case resp := <-responseChan:
+				// Skip notifications (ID == nil or non-matching).
+				respID, _ := resp.ID.(float64)
+				if int(respID) != 12 {
+					continue
+				}
+				if resp.Error == nil {
+					t.Fatal("Expected error when injecting with real DID")
+				}
+				t.Logf("Correctly rejected real DID: %s", resp.Error.Message)
+				return
+			case <-deadline:
+				t.Fatal("Timeout waiting for error response")
+			}
+		}
+	})
+
+	// Test 6: Stop the daemon
 	t.Run("Stop", func(t *testing.T) {
 		req := JSONRPCRequest{
 			JSONRPC: "2.0",

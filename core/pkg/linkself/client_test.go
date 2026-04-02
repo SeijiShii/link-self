@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -186,6 +187,204 @@ func TestClientDefaultIdentityPath(t *testing.T) {
 
 	if info.DID == "" {
 		t.Error("DID is empty")
+	}
+}
+
+func TestClientDangerouslyDeleteAllData(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	identityPath := filepath.Join(tempDir, "identity.json")
+
+	client := NewClient()
+	config := Config{
+		IdentityPath: identityPath,
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+
+	info, err := client.Start(ctx, config)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Verify identity file exists
+	if _, err := os.Stat(identityPath); os.IsNotExist(err) {
+		t.Fatal("Identity file was not created")
+	}
+
+	did := info.DID
+	if did == "" {
+		t.Fatal("DID is empty")
+	}
+
+	// Delete all data
+	if err := client.DangerouslyDeleteAllData(ctx); err != nil {
+		t.Fatalf("DangerouslyDeleteAllData failed: %v", err)
+	}
+
+	// Verify identity file is deleted
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Error("Identity file was not deleted")
+	}
+
+	// Verify node is stopped (GetMyDID returns empty)
+	if did := client.GetMyDID(); did != "" {
+		t.Errorf("GetMyDID returned %q after delete, expected empty", did)
+	}
+
+	// Verify can start again with new identity
+	client2 := NewClient()
+	info2, err := client2.Start(ctx, Config{
+		IdentityPath: identityPath,
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	})
+	if err != nil {
+		t.Fatalf("Restart after delete failed: %v", err)
+	}
+	defer client2.Stop(ctx)
+
+	if info2.DID == did {
+		t.Error("New DID should differ from deleted one")
+	}
+}
+
+func TestClientDangerouslyDeleteAllDataWithoutStart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client := NewClient()
+
+	// Should not error even without starting
+	if err := client.DangerouslyDeleteAllData(ctx); err != nil {
+		t.Errorf("DangerouslyDeleteAllData without start should not error: %v", err)
+	}
+}
+
+func TestGenerateTestDID(t *testing.T) {
+	t.Run("returns did:test: prefix", func(t *testing.T) {
+		did, err := GenerateTestDID()
+		if err != nil {
+			t.Fatalf("GenerateTestDID failed: %v", err)
+		}
+		if !strings.HasPrefix(did, "did:test:") {
+			t.Errorf("expected did:test: prefix, got %q", did)
+		}
+	})
+
+	t.Run("each call returns different DID", func(t *testing.T) {
+		did1, err := GenerateTestDID()
+		if err != nil {
+			t.Fatalf("first call failed: %v", err)
+		}
+		did2, err := GenerateTestDID()
+		if err != nil {
+			t.Fatalf("second call failed: %v", err)
+		}
+		if did1 == did2 {
+			t.Errorf("two calls returned the same DID: %q", did1)
+		}
+	})
+
+	t.Run("is clearly distinguishable from real DID", func(t *testing.T) {
+		did, err := GenerateTestDID()
+		if err != nil {
+			t.Fatalf("GenerateTestDID failed: %v", err)
+		}
+		if strings.HasPrefix(did, "did:key:") {
+			t.Error("test DID must NOT have did:key: prefix")
+		}
+		if !IsTestDID(did) {
+			t.Error("IsTestDID should return true for generated test DID")
+		}
+	})
+
+	t.Run("real DID is not test DID", func(t *testing.T) {
+		if IsTestDID("did:key:z6MkpTHR8VNs5fA2") {
+			t.Error("IsTestDID should return false for real DID")
+		}
+		if IsTestDID("") {
+			t.Error("IsTestDID should return false for empty string")
+		}
+	})
+}
+
+func TestInjectTestMessage(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	identityPath := filepath.Join(tempDir, "identity.json")
+
+	client := NewClient()
+	config := Config{
+		IdentityPath: identityPath,
+		ListenAddrs:  []string{"/ip4/127.0.0.1/tcp/0"},
+	}
+
+	_, err := client.Start(ctx, config)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer client.Stop(ctx)
+
+	t.Run("handler receives injected message", func(t *testing.T) {
+		received := make(chan struct{}, 1)
+		var gotDID string
+		var gotPayload []byte
+
+		client.SetOnMessage(func(peerDID string, payload []byte) {
+			gotDID = peerDID
+			gotPayload = payload
+			received <- struct{}{}
+		})
+
+		testDID, _ := GenerateTestDID()
+		err := client.InjectTestMessage(ctx, testDID, []byte("hello from test"))
+		if err != nil {
+			t.Fatalf("InjectTestMessage failed: %v", err)
+		}
+
+		select {
+		case <-received:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handler was not called")
+		}
+
+		if gotDID != testDID {
+			t.Errorf("peerDID = %q, want %q", gotDID, testDID)
+		}
+		if string(gotPayload) != "hello from test" {
+			t.Errorf("payload = %q, want %q", gotPayload, "hello from test")
+		}
+	})
+
+	t.Run("rejects non-test DID", func(t *testing.T) {
+		err := client.InjectTestMessage(ctx, "did:key:z6MkpTHR8VNs5fA2", []byte("bad"))
+		if err == nil {
+			t.Error("expected error when injecting with real DID")
+		}
+	})
+
+	t.Run("no panic when handler is nil", func(t *testing.T) {
+		client.SetOnMessage(nil)
+		testDID, _ := GenerateTestDID()
+		err := client.InjectTestMessage(ctx, testDID, []byte("no handler"))
+		if err != nil {
+			t.Errorf("expected no error with nil handler, got: %v", err)
+		}
+	})
+}
+
+func TestInjectTestMessageWithoutStart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client := NewClient()
+	testDID, _ := GenerateTestDID()
+	err := client.InjectTestMessage(ctx, testDID, []byte("test"))
+	if err == nil {
+		t.Error("expected error when node not started")
 	}
 }
 
