@@ -41,6 +41,31 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/role"
 )
 
+// RoleDef defines a single role and its included (inherited) roles.
+// This is a re-export of the internal role.RoleDef type for use by external applications.
+//
+// RoleDef は、単一のロールとそれに含まれる（継承される）ロールを定義します。
+// 外部アプリケーションが使用できるように、内部の role.RoleDef 型を再エクスポートしたものです。
+type RoleDef = role.RoleDef
+
+// RoleDefs maps role names to their definitions.
+// This is a re-export of the internal role.RoleDefs type for use by external applications.
+//
+// Example:
+//
+//	config := linkself.Config{
+//	    Roles: linkself.RoleDefs{
+//	        "viewer": {},
+//	        "nurse":  {Includes: []string{"viewer"}},
+//	        "admin":  {Includes: []string{"nurse"}},
+//	    },
+//	    AdminRole: "admin",
+//	}
+//
+// RoleDefs は、ロール名とその定義のマッピングです。
+// 外部アプリケーションが使用できるように、内部の role.RoleDefs 型を再エクスポートしたものです。
+type RoleDefs = role.RoleDefs
+
 // RetentionMode selects how ChangeLog entries are retained.
 type RetentionMode int
 
@@ -136,7 +161,8 @@ type Config struct {
 	// Roles defines the role hierarchy (DAG) for this suite.
 	// Keys are role names, values define which roles they include.
 	// If nil, an empty DAG is used (only "members" permission works).
-	Roles role.RoleDefs
+	// See the RoleDefs type for usage examples.
+	Roles RoleDefs
 
 	// AdminRole is the role name required for network management operations
 	// (add member, kick, set role). Defaults to "admin" if empty.
@@ -450,6 +476,9 @@ type NetworkAPI interface {
 
 	// ListGroups returns all group IDs this node belongs to.
 	ListGroups(ctx context.Context) ([]string, error)
+
+	// GetGroup returns the member DIDs of a group.
+	GetGroup(ctx context.Context, groupID string) (memberDIDs []string, err error)
 }
 
 // Note: DB interface has been removed from the public API (Phase B).
