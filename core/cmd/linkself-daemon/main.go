@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/SeijiShii/link-self/core/pkg/linkself"
 )
@@ -217,6 +218,10 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGenerateTestDID(req)
 	case "injectTestMessage":
 		handleInjectTestMessage(req)
+	case "createPairingToken":
+		handleCreatePairingToken(req)
+	case "completePairing":
+		handleCompletePairing(req)
 	case "dangerouslyDeleteAllData":
 		handleDangerouslyDeleteAllData(req)
 	case "mydb.exec":
@@ -407,6 +412,57 @@ func handleInjectTestMessage(req *JSONRPCRequest) {
 		return
 	}
 	sendResponse(req.ID, nil)
+}
+
+// --- Pairing handlers ---
+
+type CreatePairingTokenParams struct {
+	TTLSeconds int `json:"ttlSeconds"`
+}
+
+func handleCreatePairingToken(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params CreatePairingTokenParams
+	if !parseParams(req, &params) {
+		return
+	}
+	ttl := time.Duration(params.TTLSeconds) * time.Second
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	secret, err := linkSelfClient.CreatePairingToken(ctx, ttl)
+	if err != nil {
+		sendError(req.ID, -32000, "createPairingToken failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]interface{}{
+		"secret":     secret,
+		"ttlSeconds": params.TTLSeconds,
+	})
+}
+
+type CompletePairingParams struct {
+	Secret string `json:"secret"`
+}
+
+func handleCompletePairing(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params CompletePairingParams
+	if !parseParams(req, &params) {
+		return
+	}
+	userPrivKey, err := linkSelfClient.CompletePairing(ctx, params.Secret)
+	if err != nil {
+		sendError(req.ID, -32000, "completePairing failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]interface{}{
+		"userPrivKey": userPrivKey,
+	})
 }
 
 // --- DangerouslyDeleteAllData handler ---

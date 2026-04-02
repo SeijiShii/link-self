@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
@@ -42,14 +42,6 @@ interface ContactRecord {
 interface FriendRequestRecord {
   fromDID: string;
   receivedAt: number;
-}
-
-// DeviceDB record shape returned by daemon
-interface DeviceDBRecord {
-  id: string;
-  table: string;
-  body: unknown;
-  timestamp: number;
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -301,40 +293,71 @@ app.on("before-quit", async () => {
   await stopDaemon();
 });
 
-// IPC handlers: contacts (via DeviceDB daemon)
+// IPC handlers: contacts (via MyDB SQL)
 ipcMain.handle("contacts:get", async () => {
   try {
-    const recs = (await sendRequest("devicedb.list", {
-      table: "contacts",
-    })) as DeviceDBRecord[] | null;
-    if (!recs) return [];
-    return recs.map((r) => r.body as ContactRecord);
+    const rows = (await sendRequest("mydb.query", {
+      sql: `SELECT did, name, last_message, last_message_time FROM contacts ORDER BY last_message_time DESC`,
+    })) as Array<{
+      did: string;
+      name: string | null;
+      last_message: string | null;
+      last_message_time: string | null;
+    }> | null;
+    if (!rows) return [];
+    return rows.map((r) => ({
+      did: r.did,
+      name: r.name ?? undefined,
+      lastMessage: r.last_message ?? undefined,
+      lastMessageTime: r.last_message_time ?? undefined,
+    }));
   } catch {
     return [];
   }
 });
 
 ipcMain.handle("contacts:add", async (_event, contact: ContactRecord) => {
-  await sendRequest("devicedb.put", {
-    table: "contacts",
-    recordID: contact.did,
-    body: contact,
+  await sendRequest("mydb.exec", {
+    sql: `INSERT INTO contacts (did, name, last_message, last_message_time) VALUES (?, ?, ?, ?)
+          ON CONFLICT(did) DO UPDATE SET
+            name = COALESCE(excluded.name, contacts.name),
+            last_message = COALESCE(excluded.last_message, contacts.last_message),
+            last_message_time = COALESCE(excluded.last_message_time, contacts.last_message_time)`,
+    args: [
+      contact.did,
+      contact.name ?? null,
+      contact.lastMessage ?? null,
+      contact.lastMessageTime ?? null,
+    ],
   });
-  const recs = (await sendRequest("devicedb.list", {
-    table: "contacts",
-  })) as DeviceDBRecord[] | null;
-  if (!recs) return [contact];
-  return recs.map((r) => r.body as ContactRecord);
+  const rows = (await sendRequest("mydb.query", {
+    sql: `SELECT did, name, last_message, last_message_time FROM contacts ORDER BY last_message_time DESC`,
+  })) as Array<{
+    did: string;
+    name: string | null;
+    last_message: string | null;
+    last_message_time: string | null;
+  }> | null;
+  if (!rows) return [contact];
+  return rows.map((r) => ({
+    did: r.did,
+    name: r.name ?? undefined,
+    lastMessage: r.last_message ?? undefined,
+    lastMessageTime: r.last_message_time ?? undefined,
+  }));
 });
 
-// IPC handlers: friend requests (via DeviceDB daemon)
+// IPC handlers: friend requests (via MyDB SQL)
 ipcMain.handle("friendRequests:get", async () => {
   try {
-    const recs = (await sendRequest("devicedb.list", {
-      table: "friend-requests",
-    })) as DeviceDBRecord[] | null;
-    if (!recs) return [];
-    return recs.map((r) => r.body as FriendRequestRecord);
+    const rows = (await sendRequest("mydb.query", {
+      sql: `SELECT from_did, received_at FROM friend_requests ORDER BY received_at DESC`,
+    })) as Array<{ from_did: string; received_at: number }> | null;
+    if (!rows) return [];
+    return rows.map((r) => ({
+      fromDID: r.from_did,
+      receivedAt: r.received_at,
+    }));
   } catch {
     return [];
   }
@@ -343,42 +366,30 @@ ipcMain.handle("friendRequests:get", async () => {
 ipcMain.handle(
   "friendRequests:add",
   async (_event, req: FriendRequestRecord) => {
-    // Check if already exists
-    try {
-      const existing = (await sendRequest("devicedb.get", {
-        table: "friend-requests",
-        recordID: req.fromDID,
-      })) as DeviceDBRecord | null;
-      if (existing) {
-        const recs = (await sendRequest("devicedb.list", {
-          table: "friend-requests",
-        })) as DeviceDBRecord[] | null;
-        return recs ? recs.map((r) => r.body as FriendRequestRecord) : [];
-      }
-    } catch {
-      // not found, proceed to add
-    }
-    await sendRequest("devicedb.put", {
-      table: "friend-requests",
-      recordID: req.fromDID,
-      body: req,
+    await sendRequest("mydb.exec", {
+      sql: `INSERT OR IGNORE INTO friend_requests (from_did, received_at) VALUES (?, ?)`,
+      args: [req.fromDID, req.receivedAt],
     });
-    const recs = (await sendRequest("devicedb.list", {
-      table: "friend-requests",
-    })) as DeviceDBRecord[] | null;
-    return recs ? recs.map((r) => r.body as FriendRequestRecord) : [req];
+    const rows = (await sendRequest("mydb.query", {
+      sql: `SELECT from_did, received_at FROM friend_requests ORDER BY received_at DESC`,
+    })) as Array<{ from_did: string; received_at: number }> | null;
+    return rows
+      ? rows.map((r) => ({ fromDID: r.from_did, receivedAt: r.received_at }))
+      : [req];
   },
 );
 
 ipcMain.handle("friendRequests:remove", async (_event, fromDID: string) => {
-  await sendRequest("devicedb.delete", {
-    table: "friend-requests",
-    recordID: fromDID,
+  await sendRequest("mydb.exec", {
+    sql: `DELETE FROM friend_requests WHERE from_did = ?`,
+    args: [fromDID],
   });
-  const recs = (await sendRequest("devicedb.list", {
-    table: "friend-requests",
-  })) as DeviceDBRecord[] | null;
-  return recs ? recs.map((r) => r.body as FriendRequestRecord) : [];
+  const rows = (await sendRequest("mydb.query", {
+    sql: `SELECT from_did, received_at FROM friend_requests ORDER BY received_at DESC`,
+  })) as Array<{ from_did: string; received_at: number }> | null;
+  return rows
+    ? rows.map((r) => ({ fromDID: r.from_did, receivedAt: r.received_at }))
+    : [];
 });
 
 // IPC handlers: app (profile for multi-instance)
@@ -447,4 +458,246 @@ ipcMain.handle(
 
 ipcMain.handle("linkself:connect", async (_event, params: ConnectParams) => {
   return await sendRequest("connect", params);
+});
+
+ipcMain.handle("linkself:dangerouslyDeleteAllData", async () => {
+  await sendRequest("dangerouslyDeleteAllData");
+});
+
+// IPC handlers: pairing
+ipcMain.handle("pairing:createToken", async (_event, ttlSeconds: number) => {
+  return await sendRequest("createPairingToken", {
+    ttlSeconds: ttlSeconds || 300,
+  });
+});
+
+ipcMain.handle("pairing:complete", async (_event, secret: string) => {
+  return await sendRequest("completePairing", { secret });
+});
+
+// IPC handlers: network (group management)
+ipcMain.handle("network:create", async (_event, memberDIDs: string[]) => {
+  return await sendRequest("network.create", { memberDIDs });
+});
+
+ipcMain.handle(
+  "network:addMember",
+  async (_event, params: { groupID: string; memberDID: string }) => {
+    return await sendRequest("network.addMember", params);
+  },
+);
+
+ipcMain.handle("network:leave", async (_event, groupID: string) => {
+  return await sendRequest("network.leave", { groupID });
+});
+
+ipcMain.handle("network:list", async () => {
+  return await sendRequest("network.list", {});
+});
+
+ipcMain.handle("network:get", async (_event, groupID: string) => {
+  return await sendRequest("network.get", { groupID });
+});
+
+// IPC handlers: dev (test data injection)
+ipcMain.handle("dev:generateTestDID", async () => {
+  return await sendRequest("generateTestDID");
+});
+
+ipcMain.handle(
+  "dev:injectTestMessage",
+  async (_event, params: { fromDID: string; payload: string }) => {
+    return await sendRequest("injectTestMessage", params);
+  },
+);
+
+// IPC handlers: messages (SQL-based persistence)
+ipcMain.handle("messages:migrate", async () => {
+  await sendRequest("mydb.migrate", {
+    migrations: [
+      {
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS messages (
+          id TEXT PRIMARY KEY,
+          peer_did TEXT NOT NULL,
+          text TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          is_sent INTEGER NOT NULL
+        )`,
+      },
+      {
+        version: 2,
+        sql: `CREATE TABLE IF NOT EXISTS contacts (
+          did TEXT PRIMARY KEY,
+          name TEXT,
+          last_message TEXT,
+          last_message_time TEXT
+        );
+        CREATE TABLE IF NOT EXISTS friend_requests (
+          from_did TEXT PRIMARY KEY,
+          received_at INTEGER NOT NULL
+        )`,
+      },
+      {
+        version: 3,
+        sql: `CREATE TABLE IF NOT EXISTS groups (
+          group_id TEXT PRIMARY KEY,
+          name TEXT
+        );
+        CREATE TABLE IF NOT EXISTS group_members (
+          group_id TEXT NOT NULL,
+          member_did TEXT NOT NULL,
+          PRIMARY KEY (group_id, member_did)
+        );
+        ALTER TABLE messages ADD COLUMN group_id TEXT`,
+      },
+    ],
+  });
+});
+
+ipcMain.handle(
+  "messages:insert",
+  async (
+    _event,
+    msg: {
+      id: string;
+      peerDID: string;
+      text: string;
+      timestamp: number;
+      isSent: boolean;
+      groupID?: string;
+    },
+  ) => {
+    await sendRequest("mydb.exec", {
+      sql: `INSERT OR IGNORE INTO messages (id, peer_did, text, timestamp, is_sent, group_id) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        msg.id,
+        msg.peerDID,
+        msg.text,
+        msg.timestamp,
+        msg.isSent ? 1 : 0,
+        msg.groupID ?? null,
+      ],
+    });
+  },
+);
+
+ipcMain.handle("messages:getByPeer", async (_event, peerDID: string) => {
+  return await sendRequest("mydb.query", {
+    sql: `SELECT id, peer_did, text, timestamp, is_sent, group_id FROM messages WHERE peer_did = ? AND group_id IS NULL ORDER BY timestamp ASC`,
+    args: [peerDID],
+  });
+});
+
+ipcMain.handle("messages:getByGroup", async (_event, groupID: string) => {
+  return await sendRequest("mydb.query", {
+    sql: `SELECT id, peer_did, text, timestamp, is_sent, group_id FROM messages WHERE group_id = ? ORDER BY timestamp ASC`,
+    args: [groupID],
+  });
+});
+
+// IPC handlers: groups (app-level metadata persistence)
+ipcMain.handle(
+  "groups:save",
+  async (
+    _event,
+    group: { groupID: string; name?: string; memberDIDs: string[] },
+  ) => {
+    await sendRequest("mydb.exec", {
+      sql: `INSERT INTO groups (group_id, name) VALUES (?, ?) ON CONFLICT(group_id) DO UPDATE SET name = excluded.name`,
+      args: [group.groupID, group.name ?? null],
+    });
+    // Sync members: delete old, insert current
+    await sendRequest("mydb.exec", {
+      sql: `DELETE FROM group_members WHERE group_id = ?`,
+      args: [group.groupID],
+    });
+    for (const did of group.memberDIDs) {
+      await sendRequest("mydb.exec", {
+        sql: `INSERT OR IGNORE INTO group_members (group_id, member_did) VALUES (?, ?)`,
+        args: [group.groupID, did],
+      });
+    }
+  },
+);
+
+ipcMain.handle("groups:getAll", async () => {
+  const groups = (await sendRequest("mydb.query", {
+    sql: `SELECT g.group_id, g.name FROM groups g ORDER BY g.name`,
+  })) as Array<{ group_id: string; name: string | null }> | null;
+  if (!groups || groups.length === 0) return [];
+  const result = [];
+  for (const g of groups) {
+    const members = (await sendRequest("mydb.query", {
+      sql: `SELECT member_did FROM group_members WHERE group_id = ?`,
+      args: [g.group_id],
+    })) as Array<{ member_did: string }> | null;
+    result.push({
+      groupID: g.group_id,
+      name: g.name ?? undefined,
+      memberDIDs: members ? members.map((m) => m.member_did) : [],
+    });
+  }
+  return result;
+});
+
+ipcMain.handle("groups:delete", async (_event, groupID: string) => {
+  await sendRequest("mydb.exec", {
+    sql: `DELETE FROM group_members WHERE group_id = ?`,
+    args: [groupID],
+  });
+  await sendRequest("mydb.exec", {
+    sql: `DELETE FROM groups WHERE group_id = ?`,
+    args: [groupID],
+  });
+});
+
+// IPC handlers: data export/import (dump/restore)
+ipcMain.handle("data:export", async () => {
+  if (!mainWindow) return { success: false, error: "No window" };
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Export LinkSelf Data",
+    defaultPath: `linkself-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (result.canceled || !result.filePath) return { success: false };
+  try {
+    const records = await sendRequest("mydb.dump");
+    fs.writeFileSync(
+      result.filePath,
+      JSON.stringify(records, null, 2),
+      "utf-8",
+    );
+    const count = Array.isArray(records) ? records.length : 0;
+    return { success: true, count, path: result.filePath };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+});
+
+ipcMain.handle("data:import", async () => {
+  if (!mainWindow) return { success: false, error: "No window" };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Import LinkSelf Data",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+    properties: ["openFile"],
+  });
+  if (result.canceled || result.filePaths.length === 0)
+    return { success: false };
+  try {
+    const data = fs.readFileSync(result.filePaths[0], "utf-8");
+    const records = JSON.parse(data);
+    const res = (await sendRequest("mydb.restore", { records })) as {
+      applied: number;
+    };
+    return { success: true, applied: res.applied };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
 });

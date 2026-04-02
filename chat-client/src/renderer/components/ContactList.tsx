@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react';
-import type { Contact } from '../types';
+import type { Contact, Group, Conversation } from '../types';
 
 interface ContactListProps {
   contacts: Contact[];
-  currentContact: Contact | null;
-  onSelect: (contact: Contact) => void;
+  groups: Group[];
+  currentConversation: Conversation | null;
+  onSelect: (conv: Conversation) => void;
   myDID: string | null;
   connect: (peerDID: string) => Promise<void>;
   sendMessage: (peerDID: string, message: string) => Promise<void>;
+  onCreateGroup: () => void;
 }
 
 /** 貼り付けテキストから DID のみ抽出（DID: 行や生 did:key:...） */
@@ -22,13 +24,26 @@ function parseDIDFromPaste(text: string): string | null {
   return firstLine.startsWith('did:key:') ? firstLine : null;
 }
 
+function isActiveConversation(current: Conversation | null, conv: Conversation): boolean {
+  if (!current) return false;
+  if (current.type === 'contact' && conv.type === 'contact') {
+    return current.contact.did === conv.contact.did;
+  }
+  if (current.type === 'group' && conv.type === 'group') {
+    return current.group.groupID === conv.group.groupID;
+  }
+  return false;
+}
+
 export default function ContactList({
   contacts,
-  currentContact,
+  groups,
+  currentConversation,
   onSelect,
   myDID,
   connect,
   sendMessage,
+  onCreateGroup,
 }: ContactListProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addDID, setAddDID] = useState('');
@@ -75,13 +90,63 @@ export default function ContactList({
 
   return (
     <div className="contact-list">
+      {/* Groups section */}
+      {groups.length > 0 && (
+        <>
+          <div className="contact-list-header">
+            <h2>Groups</h2>
+            <button type="button" className="btn-add-contact" onClick={onCreateGroup} title="Create group">
+              ＋
+            </button>
+          </div>
+          <div className="contact-list-items">
+            {groups.map((group) => {
+              const conv: Conversation = { type: 'group', group };
+              return (
+                <div
+                  key={group.groupID}
+                  className={`contact-item ${isActiveConversation(currentConversation, conv) ? 'active' : ''}`}
+                  onClick={() => onSelect(conv)}
+                >
+                  <div className="contact-avatar group-avatar">G</div>
+                  <div className="contact-info">
+                    <div className="contact-name">
+                      {group.name || `Group (${group.memberDIDs.length})`}
+                    </div>
+                    {group.lastMessage && (
+                      <div className="contact-last-message">{group.lastMessage}</div>
+                    )}
+                  </div>
+                  {group.lastMessageTime && (
+                    <div className="contact-time">
+                      {group.lastMessageTime.toLocaleTimeString('ja-JP', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Contacts section */}
       <div className="contact-list-header">
-        <h2>連絡先</h2>
-        {myDID && (
-          <button type="button" className="btn-add-contact" onClick={openModal} title="友達申請を送る">
-            ＋
-          </button>
-        )}
+        <h2>Contacts</h2>
+        <div className="contact-list-header-actions">
+          {groups.length === 0 && (
+            <button type="button" className="btn-add-contact" onClick={onCreateGroup} title="Create group">
+              G＋
+            </button>
+          )}
+          {myDID && (
+            <button type="button" className="btn-add-contact" onClick={openModal} title="友達申請を送る">
+              ＋
+            </button>
+          )}
+        </div>
       </div>
       {showAddModal && (
         <div className="modal-overlay" onClick={() => !sending && setShowAddModal(false)}>
@@ -117,40 +182,43 @@ export default function ContactList({
           </div>
         </div>
       )}
-      {contacts.length === 0 ? (
+      {contacts.length === 0 && groups.length === 0 ? (
         <div className="contact-list-empty">
           <p>連絡先がありません</p>
           <p className="hint">友達申請を送るか、相手から申請が届くとここに表示されます</p>
         </div>
       ) : (
         <div className="contact-list-items">
-          {contacts.map((contact) => (
-            <div
-              key={contact.did}
-              className={`contact-item ${currentContact?.did === contact.did ? 'active' : ''}`}
-              onClick={() => onSelect(contact)}
-            >
-              <div className="contact-avatar">
-                {contact.name?.[0] || contact.did[10]}
-              </div>
-              <div className="contact-info">
-                <div className="contact-name">
-                  {contact.name || contact.did.substring(0, 16) + '...'}
+          {contacts.map((contact) => {
+            const conv: Conversation = { type: 'contact', contact };
+            return (
+              <div
+                key={contact.did}
+                className={`contact-item ${isActiveConversation(currentConversation, conv) ? 'active' : ''}`}
+                onClick={() => onSelect(conv)}
+              >
+                <div className="contact-avatar">
+                  {contact.name?.[0] || contact.did[10]}
                 </div>
-                {contact.lastMessage && (
-                  <div className="contact-last-message">{contact.lastMessage}</div>
+                <div className="contact-info">
+                  <div className="contact-name">
+                    {contact.name || contact.did.substring(0, 16) + '...'}
+                  </div>
+                  {contact.lastMessage && (
+                    <div className="contact-last-message">{contact.lastMessage}</div>
+                  )}
+                </div>
+                {contact.lastMessageTime && (
+                  <div className="contact-time">
+                    {contact.lastMessageTime.toLocaleTimeString('ja-JP', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
                 )}
               </div>
-              {contact.lastMessageTime && (
-                <div className="contact-time">
-                  {contact.lastMessageTime.toLocaleTimeString('ja-JP', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

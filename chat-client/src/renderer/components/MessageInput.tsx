@@ -2,17 +2,22 @@ interface MessageInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
-  onKeyPress: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
-export default function MessageInput({ value, onChange, onSend, onKeyPress }: MessageInputProps) {
+export default function MessageInput({
+  value,
+  onChange,
+  onSend,
+  onKeyDown,
+}: MessageInputProps) {
   return (
     <div className="message-input">
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyPress={onKeyPress}
+        onKeyDown={onKeyDown}
         placeholder="メッセージを入力..."
         className="message-input-field"
       />
