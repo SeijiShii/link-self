@@ -283,6 +283,14 @@ func (g *networkAPI) ListGroups(ctx context.Context) ([]string, error) {
 	return g.store.ListForMember(g.selfDID)
 }
 
+func (g *networkAPI) GetGroup(ctx context.Context, groupID string) ([]string, error) {
+	n, err := g.store.GetNetwork(groupID)
+	if err != nil {
+		return nil, err
+	}
+	return n.Members, nil
+}
+
 // memberResolverAdapter adapts network.Store to groupshare.MemberResolver.
 type memberResolverAdapter struct {
 	store   network.Store

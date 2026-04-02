@@ -211,6 +211,8 @@ func handleRequest(req *JSONRPCRequest) {
 		handleGroupsLeave(req)
 	case "network.list":
 		handleGroupsList(req)
+	case "network.get":
+		handleGroupsGet(req)
 	case "generateTestDID":
 		handleGenerateTestDID(req)
 	case "injectTestMessage":
@@ -577,6 +579,29 @@ func handleGroupsList(req *JSONRPCRequest) {
 		return
 	}
 	sendResponse(req.ID, groups)
+}
+
+type GroupsGetParams struct {
+	GroupID string `json:"groupID"`
+}
+
+func handleGroupsGet(req *JSONRPCRequest) {
+	if !requireClient(req) {
+		return
+	}
+	var params GroupsGetParams
+	if !parseParams(req, &params) {
+		return
+	}
+	members, err := linkSelfClient.Network().GetGroup(ctx, params.GroupID)
+	if err != nil {
+		sendError(req.ID, -32000, "network.get failed", err.Error())
+		return
+	}
+	sendResponse(req.ID, map[string]interface{}{
+		"groupID":    params.GroupID,
+		"memberDIDs": members,
+	})
 }
 
 // --- DB handlers ---
