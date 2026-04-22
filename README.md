@@ -78,6 +78,7 @@ We plan to register the project on **Gitcoin Grants** to accept donations. Your 
   **Phase 2: インフラモジュール** — インフラモジュール整備。LinkSelf をインフラとして使う 1 本の本格サンプルアプリ（チャット＋ファイル共有）。他アプリから LinkSelf をライブラリとして使う道筋の整備。
 - [ ] **Phase 3: Platforms** — PC, Android, iOS.  
   **Phase 3: プラットフォーム** — PC、Android、iOS。
+  - Mobile (iOS/Android) support design: [docs/spec/mobile-support.md](docs/spec/mobile-support.md)
 
 ---
 
