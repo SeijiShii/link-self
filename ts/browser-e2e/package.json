@@ -1,0 +1,24 @@
+{
+  "name": "@linkself/browser-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Real-browser E2E for @linkself/core: OPFS sqlite persistence, WebSocket P2P to a Go node, Web Locks multi-tab",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@libp2p/websockets": "^10.1.15",
+    "@linkself/core": "file:../linkself",
+    "@multiformats/multiaddr": "^13.0.3",
+    "libp2p": "^3.3.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1",
+    "@types/node": "^26.1.0",
+    "typescript": "^5",
+    "vite": "^6"
+  }
+}
