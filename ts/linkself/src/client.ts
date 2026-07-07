@@ -25,6 +25,7 @@ import {
   type SharedStorage,
   type SubscriptionStore,
 } from "./groupshare.js";
+import { multiaddr } from "@multiformats/multiaddr";
 import { MyDB, wireSqlSync } from "./mydb.js";
 import { LinkSelfNode, type Libp2pLike } from "./node.js";
 import { SqlProxy, type SqlDatabase } from "./sqlproxy.js";
@@ -114,7 +115,21 @@ export interface LinkSelfClientOptions {
    * (row-readback, matching the Go client).
    */
   sqlDatabase?: SqlDatabase | null;
+  /**
+   * FastStart hints: peers to dial (and authenticate) immediately on
+   * start, skipping discovery — the browser counterpart of Go's
+   * FastStart + KnownPeerHints (mobile-support §3.1.3). Best-effort:
+   * unreachable entries are skipped. Persist a snapshotKnownPeers()
+   * result across sessions and pass it back here.
+   */
+  knownPeers?: KnownPeer[];
   now?: () => number;
+}
+
+/** A previously seen peer: DID plus its last known multiaddrs. */
+export interface KnownPeer {
+  did: string;
+  addrs: string[];
 }
 
 /**
@@ -137,10 +152,14 @@ export class LinkSelfClient {
   /** Unified data API (KV + SQL). SQL methods require options.sqlDatabase. */
   myDB!: MyDB;
   private readonly sqlDatabase: SqlDatabase | null;
+  private readonly knownPeers: KnownPeer[];
+  private readonly libp2p: Libp2pLike;
 
   constructor(opts: LinkSelfClientOptions) {
     this.identity = opts.identity;
     this.sqlDatabase = opts.sqlDatabase ?? null;
+    this.knownPeers = opts.knownPeers ?? [];
+    this.libp2p = opts.libp2p;
     const selfDID = opts.identity.did;
     this.node = new LinkSelfNode(opts.libp2p, opts.identity);
 
@@ -238,6 +257,60 @@ export class LinkSelfClient {
         console.error("linkself: announce subscriptions:", err);
       });
     });
+
+    await this.fastStart();
+  }
+
+  /**
+   * FastStart: dial + authenticate every known peer in parallel,
+   * best-effort (unreachable peers are skipped, first reachable addr per
+   * peer wins). Connecting also flushes store-and-forward queues and
+   * re-announces subscriptions via the auth-success hook.
+   */
+  private async fastStart(): Promise<void> {
+    await Promise.all(
+      this.knownPeers.map(async (peer) => {
+        for (const addr of peer.addrs) {
+          try {
+            await this.node.connectToAddr(peer.did, multiaddr(addr));
+            return;
+          } catch {
+            // try the next address
+          }
+        }
+      }),
+    );
+  }
+
+  /**
+   * Snapshot the currently connected peers as FastStart hints. Persist
+   * this (e.g. localStorage / OPFS) and pass it as options.knownPeers on
+   * the next start — the browser counterpart of Go's peerstore
+   * persistence (mobile-support §3.1.4).
+   */
+  snapshotKnownPeers(): KnownPeer[] {
+    const byDID = new Map<string, Set<string>>();
+    for (const conn of this.libp2p.getConnections()) {
+      const pub = conn.remotePeer.publicKey;
+      if (pub == null || pub.type !== "Ed25519") {
+        continue;
+      }
+      const did = publicKeyToDID(pub);
+      const addrs = byDID.get(did) ?? new Set<string>();
+      // remoteAddr already includes /p2p/<peer-id> or can be dialed as-is;
+      // append the peer id when missing so connectToAddr can verify it.
+      const addr = conn.remoteAddr.toString();
+      addrs.add(
+        addr.includes("/p2p/")
+          ? addr
+          : `${addr}/p2p/${conn.remotePeer.toString()}`,
+      );
+      byDID.set(did, addrs);
+    }
+    return [...byDID.entries()].map(([did, addrs]) => ({
+      did,
+      addrs: [...addrs],
+    }));
   }
 
   get did(): string {

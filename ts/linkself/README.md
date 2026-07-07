@@ -47,9 +47,16 @@ npm run typecheck
 golden ベクタ（`test/vectors.ts`）は Go 実装から生成した決定値。Go 側のワイヤ形式を
 変更した場合は再生成する（シード `0102…20` の Ed25519 鍵）。
 
+## FastStart / peerstore 永続化（実装済み）
+
+mobile-support §3.1.3 / §3.1.4 のブラウザ版:
+
+- `LinkSelfClientOptions.knownPeers` — start() 時に既知ピアへ並列 dial + 認証（到達不能はスキップ、best-effort）。Go の `FastStart` + `KnownPeerHints` 相当
+- `client.snapshotKnownPeers()` — 現在の接続を `{did, addrs[]}` として取得。アプリが localStorage / OPFS に保存し、次回起動時に `knownPeers` へ渡す
+- libp2p の `datastore` オプションに永続ストア（ブラウザ: `datastore-idb` = IndexedDB）を渡せば peerstore（アドレス帳）がインスタンスを跨いで残り、**PeerId だけで再 dial 可能**になる（テストで検証済み）
+
 ## 次のステップ
 
-1. ブラウザ実機（Vite + PWA）での動作確認 — OPFS 永続化・COOP/COEP ヘッダ・多タブ直列化（Web Locks）・リレー経由接続
-2. FastStart / peerstore 永続化（IndexedDB/OPFS）— mobile-support §3.1.3/3.1.4 のブラウザ版
-3. dataroot 相当の OPFS ディレクトリレイアウト（`<DID>/suites/<SuiteID>/data.db` 相当）
-4. home-visit-suite PWA への統合（M5）。Go 側 Phase C（groupshare ⇔ MyDB sync scope 統合）が入り次第、interop ハーネスを pkg/linkself ベースへ置換
+1. **ブラウザ実機 E2E の初回実行**（`ts/browser-e2e/`、実装済み・リソース競合で実行保留中）— 実行後に FastStart のリロード跨ぎシナリオも追加する
+2. dataroot 相当の OPFS ディレクトリレイアウト（`<DID>/suites/<SuiteID>/data.db` 相当）
+3. home-visit-suite PWA への統合（M5）。Go 側 Phase C（groupshare ⇔ MyDB sync scope 統合）が入り次第、interop ハーネスを pkg/linkself ベースへ置換
