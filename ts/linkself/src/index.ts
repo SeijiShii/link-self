@@ -5,7 +5,19 @@ export * from "./auth.js";
 export * from "./router.js";
 export * from "./storeforward.js";
 export * from "./node.js";
-export * from "./syncdb.js";
+export type {
+  MemberResolver as SyncMemberResolver,
+  SendGroupFunc as SyncSendGroupFunc,
+} from "./syncdb.js";
+export {
+  marshalRecord,
+  MemStorage,
+  SyncLayer,
+  unmarshalRecord,
+  type RecordStorage,
+  type SyncRecord,
+} from "./syncdb.js";
 export * from "./role.js";
 export * from "./permission.js";
 export * from "./group.js";
+export * from "./groupshare.js";
