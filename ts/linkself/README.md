@@ -15,7 +15,8 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/router.ts` | `internal/node/router.go` | ✅ | 単体テスト（envelope 種別ルーティング） |
 | `src/storeforward.ts` | `internal/storeforward` | ✅ | 単体テスト + live interop（未接続時キュー→接続時フラッシュ） |
 | `src/node.ts`（`LinkSelfNode`） | `internal/node`（リーフ側） | ✅ | **live interop**: connectToAddr（dial+auth+flush）・sendMessage・受信ルーティングを Go ノード相手に確認 |
-| syncdb / group / role / permission / devicesync / sqlproxy 等 | `internal/*` | ❌ 未着手 | — |
+| `src/syncdb.ts` | `internal/syncdb` | ✅ | SyncRecord JSON が golden ベクタでバイト一致（`body:null` 含む）。LWW 適用は Go の sync_test.go を移植 |
+| group / role / permission / groupshare / devicesync / sqlproxy 等 | `internal/*` | ❌ 未着手 | — |
 
 ## 注意（Go 実装との互換性のための仕様）
 
@@ -38,7 +39,7 @@ golden ベクタ（`test/vectors.ts`）は Go 実装から生成した決定値�
 
 ## 次のステップ
 
-1. syncdb（差分同期）— 工数の本丸
-2. group / role / permission
+1. group / role / permission（グループモデル・権限判定）
+2. groupshare（チャンネル共有・購読フィルタリング — 残りの本丸、Go 側 約 3,500 行）
 3. devicesync / sqlproxy
 4. sqlite-wasm + OPFS 上の MyDB 相当 API（M3）
