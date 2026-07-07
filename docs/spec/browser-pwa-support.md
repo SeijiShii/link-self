@@ -152,7 +152,7 @@ home-visit-suite の全面 PWA 化決定（2026-07-07。単一 PWA + ロール�
 | FastStart / peerstore 永続化 | ❌ 未実装 | mobile-support.md §3.1.3 / §3.1.4 参照 |
 | メールボックス（store-and-forward） | ⚠️ 既存実装あり | `internal/storeforward`。常時稼働ノードでの預かり運用（ディスク永続化・容量管理）は未整備 |
 | M1 疎通 PoC（js-libp2p ↔ Go） | ✅ **PASSED**（2026-07-07） | `ts/poc-m1/`。WebSocket 直結 + Circuit Relay v2 経由の両経路で `/linkself/msg/1.0.0` の双方向往復に成功。Noise / yamux / uint32 framing / did:key 導出の互換を確認。js 側は `runOnLimitedConnection: true` が必要（Go 側 `WithAllowLimitedConn` と対） |
-| TS 実装（プロトコル層） | ❌ 未着手 | M2: auth / envelope / syncdb / group 等の再実装。`ts/poc-m1` の framing 実装が出発点 |
+| TS 実装（プロトコル層） | ⚠️ **M2 進行中**（2026-07-07 着手） | `ts/linkself/`（`@linkself/core`）。did / framing / envelope / auth 実装済み — golden ベクタで Go とバイト一致、auth は js↔Go 双方向 live interop 成功。残: storeforward / syncdb / group / role / permission / devicesync / sqlproxy 等（詳細は `ts/linkself/README.md`） |
 
 実装ノート:
 - **autorelay は public でないリレーアドレスを広告対象から除外する**（`cleanupAddressSet`）。loopback 上のテストや LAN 内リレーでは `/p2p-circuit` アドレスが `Host.Addrs()` に現れないため、テストでは circuit アドレスを手動構築して接続確認している。公開アドレスを持つ本番リレーでは自動的に広告される

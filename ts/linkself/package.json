@@ -1,0 +1,28 @@
+{
+  "name": "@linkself/core",
+  "version": "0.0.1",
+  "description": "TypeScript implementation of the LinkSelf protocol layer (wire-compatible second implementation of the Go core) for browsers / PWA",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@libp2p/crypto": "latest",
+    "@libp2p/interface": "latest",
+    "@libp2p/peer-id": "latest",
+    "@noble/hashes": "^1",
+    "multiformats": "latest"
+  },
+  "devDependencies": {
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@libp2p/websockets": "^10.1.15",
+    "@multiformats/multiaddr": "^13.0.3",
+    "@types/node": "^22",
+    "libp2p": "^3.3.4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

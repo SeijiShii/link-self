@@ -19,6 +19,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/SeijiShii/link-self/core/internal/auth"
 	"github.com/SeijiShii/link-self/core/internal/did"
 	"github.com/SeijiShii/link-self/core/internal/node"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -56,7 +57,18 @@ func startEchoNode(ctx context.Context, cfg node.Config, role string) (*node.Nod
 			fmt.Fprintf(os.Stderr, "[%s] DIDToPeerID: %v\n", role, err)
 			return
 		}
-		if err := n.SendToPeerID(ctx, pid, append([]byte(role+":"), payload...)); err != nil {
+		reply := append([]byte(role+":"), payload...)
+		// "auth-me": run the LinkSelf auth initiator toward the sender, so the
+		// remote (js) side can prove its responder implementation.
+		if string(payload) == "auth-me" {
+			if s, err := auth.RunInitiator(ctx, n.Host, pid, peerDID); err != nil {
+				reply = []byte("auth-fail:" + err.Error())
+			} else {
+				s.Close()
+				reply = []byte("auth-ok")
+			}
+		}
+		if err := n.SendToPeerID(ctx, pid, reply); err != nil {
 			fmt.Fprintf(os.Stderr, "[%s] send back: %v\n", role, err)
 		}
 	})
