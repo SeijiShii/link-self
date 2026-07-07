@@ -32,6 +32,12 @@ async function p2pEcho(wsAddr: string, goDID: string): Promise<string> {
     transports: [webSockets()],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
+    connectionGater: {
+      // Browsers deny loopback/private addresses by default (local-network
+      // protection). Production dials a public relay; the E2E harness talks
+      // to a Go node on 127.0.0.1, so allow it here.
+      denyDialMultiaddr: async () => false,
+    },
   });
   const client = new LinkSelfClient({ libp2p, identity });
   await client.start();
@@ -53,14 +59,47 @@ async function p2pEcho(wsAddr: string, goDID: string): Promise<string> {
   return result;
 }
 
+/** Diagnostic: report OPFS API availability on the main thread vs a worker. */
+async function opfsProbe(): Promise<Record<string, boolean>> {
+  const mainHasSAH =
+    typeof FileSystemFileHandle !== "undefined" &&
+    "createSyncAccessHandle" in FileSystemFileHandle.prototype;
+  const workerHasSAH = await new Promise<boolean>((resolve) => {
+    const src = `self.onmessage = () => {
+      postMessage(typeof FileSystemFileHandle !== 'undefined' && 'createSyncAccessHandle' in FileSystemFileHandle.prototype);
+    };`;
+    const w = new Worker(
+      URL.createObjectURL(new Blob([src], { type: "text/javascript" })),
+    );
+    w.onmessage = (e) => {
+      resolve(Boolean(e.data));
+      w.terminate();
+    };
+    w.postMessage(null);
+  });
+  return {
+    crossOriginIsolated: globalThis.crossOriginIsolated,
+    hasSharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
+    hasGetDirectory: typeof navigator.storage?.getDirectory === "function",
+    mainThreadSyncAccessHandle: mainHasSAH,
+    workerSyncAccessHandle: workerHasSAH,
+  };
+}
+
 /** Scenario: write through SqlProxy into an OPFS-backed sqlite database. */
 async function opfsWrite(): Promise<number> {
   const db = await SqliteWasmDatabase.open({ filename: "e2e-data.db" });
   const proxy = await SqlProxy.open(db);
   await proxy.migrate([
-    { version: 1, sql: "CREATE TABLE visits (id TEXT PRIMARY KEY, status TEXT)" },
+    {
+      version: 1,
+      sql: "CREATE TABLE visits (id TEXT PRIMARY KEY, status TEXT)",
+    },
   ]);
-  await proxy.exec("INSERT OR REPLACE INTO visits (id, status) VALUES (?, ?)", ["v1", "met"]);
+  await proxy.exec("INSERT OR REPLACE INTO visits (id, status) VALUES (?, ?)", [
+    "v1",
+    "met",
+  ]);
   const rows = await proxy.query("SELECT COUNT(*) AS n FROM visits");
   await db.close();
   return Number(rows[0]!.n);
@@ -86,6 +125,7 @@ declare global {
   interface Window {
     linkselfE2E: {
       p2pEcho: typeof p2pEcho;
+      opfsProbe: typeof opfsProbe;
       opfsWrite: typeof opfsWrite;
       opfsRead: typeof opfsRead;
       acquireLock: typeof acquireLock;
@@ -96,6 +136,7 @@ declare global {
 
 window.linkselfE2E = {
   p2pEcho,
+  opfsProbe,
   opfsWrite,
   opfsRead,
   acquireLock,

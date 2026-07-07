@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -12,8 +13,11 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
     fs: {
-      // allow serving the linked @linkself/core TS sources
-      allow: [".."],
+      // Serve the linked @linkself/core sources AND its node_modules
+      // (sqlite-wasm's sqlite3.wasm / OPFS async-proxy worker are fetched
+      // at runtime from ts/linkself/node_modules via the file: link).
+      // Root is app/, so ".." reaches ts/ — covers both packages.
+      allow: [fileURLToPath(new URL("..", import.meta.url))],
     },
   },
   optimizeDeps: {

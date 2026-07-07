@@ -24,7 +24,7 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/network.ts` | `internal/network` | ✅ | ロールゲート付き NetworkService。最終メンバー脱退で削除等のドメイン規則 |
 | `src/pairing.ts` | `internal/pairing` | ✅ | 鍵転送は libp2p protobuf 形式で **Go の MarshalPrivateKey と golden 一致**（Go 端末 ⇔ js 端末ペアリング互換） |
 | `src/client.ts`（`LinkSelfClient`） | `pkg/linkself` | ✅ | 全レイヤの組み立て + envelope 配線。**e2e**: 実 libp2p 2 ノードの TS クライアント同士で、オフライン購読→auth 時フラッシュ→topic フィルタ配信→LWW 適用のフルフローを検証。DeviceSyncSubscriptionStore 込み |
-| `src/sqlite.ts`（`SqliteWasmDatabase`） | `storage/sqlite`（ncruces/go-sqlite3 相当） | ✅ | @sqlite.org/sqlite-wasm。Node（テスト）はインメモリ、ブラウザではファイル名指定で OPFS VFS を自動選択。多タブ直列化はアプリ層（Web Locks 等）の責務として明記 |
+| `src/sqlite.ts`（`SqliteWasmDatabase`）+ `src/sqlite-worker.ts` | `storage/sqlite`（ncruces/go-sqlite3 相当） | ✅ 実ブラウザ検証済み | @sqlite.org/sqlite-wasm。**永続（ファイル名指定）は専用 Worker で OPFS SAHPool VFS を動かす**（`createSyncAccessHandle` は Worker のみのため main thread 不可）。`:memory:`（Node テスト）は main thread の `oo1.DB`。多タブ直列化はアプリ層（Web Locks 等）の責務。ブラウザでのリロード跨ぎ永続を `ts/browser-e2e` で検証 |
 | `src/mydb.ts`（`MyDB` + `wireSqlSync`） | `pkg/linkself`（myDB） | ✅ | KV（devicesync 経由レプリケーション）+ SQL（sqlproxy 経由）。SQL 書き込みの devicesync ミラーリング（row-readback）は Go client と同一配線。SyncScope は Go 同様 Phase C 待ちの記録のみ |
 | dht / dataroot | `internal/*` | ❌ 未着手 | dht はブラウザではクライアントモード限定（リレー経由接続が主経路のため優先度低）。dataroot 相当の OPFS ディレクトリレイアウトは PWA 統合時に決定 |
 
@@ -57,6 +57,6 @@ mobile-support §3.1.3 / §3.1.4 のブラウザ版:
 
 ## 次のステップ
 
-1. **ブラウザ実機 E2E の初回実行**（`ts/browser-e2e/`、実装済み・リソース競合で実行保留中）— 実行後に FastStart のリロード跨ぎシナリオも追加する
+1. **ブラウザ実機 E2E は 4/4 PASS 済み**（`ts/browser-e2e/`）。次は FastStart のリロード跨ぎシナリオを追加する
 2. dataroot 相当の OPFS ディレクトリレイアウト（`<DID>/suites/<SuiteID>/data.db` 相当）
 3. home-visit-suite PWA への統合（M5）。Go 側 Phase C（groupshare ⇔ MyDB sync scope 統合）が入り次第、interop ハーネスを pkg/linkself ベースへ置換
