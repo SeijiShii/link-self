@@ -137,6 +137,26 @@ Android は FGS + 電池最適化除外で画面を閉じても同期継続可�
 - **Vercel**: PWA 配信専用
 - Go 側の拡張工事（`/ws`・`/webtransport` listener、Circuit Relay v2、FastStart、peerstore 永続化）は**モバイル対応とブラウザ対応の両方に一度で効く**
 
-## 7. 本メモの位置づけ
+## 7. 実装状況（2026-07-07）
 
-設計議論の記録（検討メモ）。実装スコープ・優先度が確定したら mobile-support.md 同様の正式仕様に昇格させるか、該当仕様へ参照を移す。
+home-visit-suite の全面 PWA 化決定（2026-07-07。単一 PWA + ロール別 UI、モバイルネイティブ案は廃止）を受け、Go 側の拡張を実装済み:
+
+| 項目 | 状態 | 内容 |
+|------|------|------|
+| WebSocket listener | ✅ 実装済み（テストで固定化） | go-libp2p のデフォルトトランスポートに含まれるため、`ListenAddrs` に `/ip4/.../tcp/<port>/ws` を指定するだけで動作。`test/integration/browser_transport_test.go` |
+| Circuit Relay v2（サーバー役） | ✅ 実装済み | `Config.EnableRelayService`。**リレーサービスは自ノードが public reachable と判定されるまで起動しない**ため、公開アドレス確定済みノードでは `ForceReachability: "public"` を併用 |
+| Circuit Relay v2（クライアント役） | ✅ 実装済み | `Config.CircuitRelays []string`（複数登録可）。static relay へ予約し `/p2p-circuit` アドレスを広告。着信不能が確定しているリーフは `ForceReachability: "private"` で即予約 |
+| リレー経由ストリーム | ✅ 実装済み | relayed conn は libp2p 上 limited 扱いのため、auth / メッセージのストリーム開設で `network.WithAllowLimitedConn` を許可（`internal/node`） |
+| デーモン露出 | ✅ 実装済み | `linkself-daemon` の `start` パラメータに `circuitRelays` / `enableRelayService` / `forceReachability` を追加 |
+| WebTransport listener | 未検証 | デフォルトトランスポートに含まれる（`/udp/<port>/quic-v1/webtransport`）。js-libp2p との疎通 PoC（M1）で検証する |
+| FastStart / peerstore 永続化 | ❌ 未実装 | mobile-support.md §3.1.3 / §3.1.4 参照 |
+| メールボックス（store-and-forward） | ⚠️ 既存実装あり | `internal/storeforward`。常時稼働ノードでの預かり運用（ディスク永続化・容量管理）は未整備 |
+| M1 疎通 PoC（js-libp2p ↔ Go） | ✅ **PASSED**（2026-07-07） | `ts/poc-m1/`。WebSocket 直結 + Circuit Relay v2 経由の両経路で `/linkself/msg/1.0.0` の双方向往復に成功。Noise / yamux / uint32 framing / did:key 導出の互換を確認。js 側は `runOnLimitedConnection: true` が必要（Go 側 `WithAllowLimitedConn` と対） |
+| TS 実装（プロトコル層） | ❌ 未着手 | M2: auth / envelope / syncdb / group 等の再実装。`ts/poc-m1` の framing 実装が出発点 |
+
+実装ノート:
+- **autorelay は public でないリレーアドレスを広告対象から除外する**（`cleanupAddressSet`）。loopback 上のテストや LAN 内リレーでは `/p2p-circuit` アドレスが `Host.Addrs()` に現れないため、テストでは circuit アドレスを手動構築して接続確認している。公開アドレスを持つ本番リレーでは自動的に広告される
+
+## 8. 本メモの位置づけ
+
+設計議論の記録（検討メモ）＋ Go 側実装状況の追跡。実装スコープ・優先度が確定したら mobile-support.md 同様の正式仕様に昇格させるか、該当仕様へ参照を移す。home-visit-suite 側の要望原稿は同リポジトリ `docs/wants/11_LinkSelf拡張要望.md`（PWA 版に改訂済み）を参照。

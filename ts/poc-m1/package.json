@@ -1,0 +1,24 @@
+{
+  "name": "@linkself/poc-m1",
+  "version": "0.0.1",
+  "private": true,
+  "description": "M1 interop PoC: js-libp2p dials a Go LinkSelf node over WebSocket (and Circuit Relay v2) and exchanges /linkself/msg/1.0.0 frames",
+  "type": "module",
+  "scripts": {
+    "poc": "tsx src/poc.ts"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "latest",
+    "@chainsafe/libp2p-yamux": "latest",
+    "@libp2p/circuit-relay-v2": "latest",
+    "@libp2p/identify": "latest",
+    "@libp2p/websockets": "latest",
+    "@multiformats/multiaddr": "latest",
+    "libp2p": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
