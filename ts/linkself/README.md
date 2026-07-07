@@ -12,7 +12,10 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/framing.ts` | `internal/node`（uint32 BE framing） | ✅ | M1 PoC + interop テスト |
 | `src/envelope.ts` | `internal/envelope` | ✅ | golden ベクタで JSON バイト一致 |
 | `src/auth.ts` | `internal/auth` | ✅ | **live interop**: js→Go / Go→js 双方向の認証成功 |
-| storeforward / syncdb / group / role / permission / devicesync / sqlproxy 等 | `internal/*` | ❌ 未着手 | — |
+| `src/router.ts` | `internal/node/router.go` | ✅ | 単体テスト（envelope 種別ルーティング） |
+| `src/storeforward.ts` | `internal/storeforward` | ✅ | 単体テスト + live interop（未接続時キュー→接続時フラッシュ） |
+| `src/node.ts`（`LinkSelfNode`） | `internal/node`（リーフ側） | ✅ | **live interop**: connectToAddr（dial+auth+flush）・sendMessage・受信ルーティングを Go ノード相手に確認 |
+| syncdb / group / role / permission / devicesync / sqlproxy 等 | `internal/*` | ❌ 未着手 | — |
 
 ## 注意（Go 実装との互換性のための仕様）
 
@@ -35,7 +38,7 @@ golden ベクタ（`test/vectors.ts`）は Go 実装から生成した決定値�
 
 ## 次のステップ
 
-1. store-and-forward / メッセージルーティング（`internal/node` の router 相当）
-2. syncdb（差分同期）— 工数の本丸
-3. group / role / permission
+1. syncdb（差分同期）— 工数の本丸
+2. group / role / permission
+3. devicesync / sqlproxy
 4. sqlite-wasm + OPFS 上の MyDB 相当 API（M3）
