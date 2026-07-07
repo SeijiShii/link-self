@@ -25,7 +25,9 @@ import {
   type SharedStorage,
   type SubscriptionStore,
 } from "./groupshare.js";
+import { MyDB, wireSqlSync } from "./mydb.js";
 import { LinkSelfNode, type Libp2pLike } from "./node.js";
+import { SqlProxy, type SqlDatabase } from "./sqlproxy.js";
 import {
   MemNetworkStore,
   NetworkService,
@@ -106,6 +108,12 @@ export interface LinkSelfClientOptions {
   networkStore?: NetworkStore;
   remoteSubs?: SubscriptionStore;
   memberRoleResolver?: MemberRoleResolver | null;
+  /**
+   * SQL backend for MyDB's SQL surface (e.g. SqliteWasmDatabase). Omit for
+   * KV-only operation; detected SQL writes are mirrored into devicesync
+   * (row-readback, matching the Go client).
+   */
+  sqlDatabase?: SqlDatabase | null;
   now?: () => number;
 }
 
@@ -126,9 +134,13 @@ export class LinkSelfClient {
   readonly remoteSubs: SubscriptionStore;
   readonly roleDAG: RoleDAG;
   readonly identity: Identity;
+  /** Unified data API (KV + SQL). SQL methods require options.sqlDatabase. */
+  myDB!: MyDB;
+  private readonly sqlDatabase: SqlDatabase | null;
 
   constructor(opts: LinkSelfClientOptions) {
     this.identity = opts.identity;
+    this.sqlDatabase = opts.sqlDatabase ?? null;
     const selfDID = opts.identity.did;
     this.node = new LinkSelfNode(opts.libp2p, opts.identity);
 
@@ -192,6 +204,15 @@ export class LinkSelfClient {
 
   /** Register protocol handlers and wire incoming envelope routing. */
   async start(): Promise<void> {
+    // Assemble MyDB (KV always; SQL when a backend was provided).
+    if (this.sqlDatabase != null) {
+      const proxy = await SqlProxy.open(this.sqlDatabase);
+      wireSqlSync(proxy, this.deviceSync);
+      this.myDB = new MyDB(this.deviceSync, proxy);
+    } else {
+      this.myDB = new MyDB(this.deviceSync, null);
+    }
+
     await this.node.start();
     this.node.setOnDeviceSync((_peerDID, payload) => {
       void this.deviceSync

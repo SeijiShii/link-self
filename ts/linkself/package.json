@@ -13,6 +13,7 @@
     "@libp2p/interface": "latest",
     "@libp2p/peer-id": "latest",
     "@noble/hashes": "^1",
+    "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "multiformats": "latest"
   },
   "devDependencies": {

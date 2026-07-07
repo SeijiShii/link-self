@@ -72,7 +72,12 @@ export function unmarshalChangeEntry(data: Uint8Array): ChangeEntry {
 /** Persistence interface for device-local data. */
 export interface DeviceStorage {
   /** Store or update a record; returns the assigned sequence number. */
-  put(table: string, id: string, body: Uint8Array | null, timestamp: number): Promise<number>;
+  put(
+    table: string,
+    id: string,
+    body: Uint8Array | null,
+    timestamp: number,
+  ): Promise<number>;
   /** Null when not found. */
   get(table: string, id: string): Promise<DeviceRecord | null>;
   /** Remove a record; returns the assigned sequence number. */
@@ -107,7 +112,10 @@ export interface SyncPeer {
 }
 
 /** Sends a payload to a specific peer device. */
-export type DeviceSendFunc = (peerId: string, payload: Uint8Array) => Promise<void>;
+export type DeviceSendFunc = (
+  peerId: string,
+  payload: Uint8Array,
+) => Promise<void>;
 
 /** Returns the list of peer device IDs (same DID, other devices). */
 export type PeerProvider = () => Promise<string[]>;
@@ -154,12 +162,24 @@ export class ReplicationEngine {
     this.now = opts.now ?? Date.now;
   }
 
+  /** The underlying device storage (exposed like Go's exported field). */
+  get storage(): DeviceStorage {
+    return this.opts.storage;
+  }
+
   /** Store a record locally and broadcast the change to peer devices. */
   async put(table: string, id: string, body: Uint8Array): Promise<void> {
     const now = this.now();
     const seq = await this.opts.storage.put(table, id, body, now);
     await this.enforceRetention(now);
-    await this.broadcast({ seq, timestamp: now, table, recordId: id, op: OP_PUT, body });
+    await this.broadcast({
+      seq,
+      timestamp: now,
+      table,
+      recordId: id,
+      op: OP_PUT,
+      body,
+    });
   }
 
   async get(table: string, id: string): Promise<DeviceRecord | null> {
@@ -170,7 +190,14 @@ export class ReplicationEngine {
   async delete(table: string, id: string): Promise<void> {
     const now = this.now();
     const seq = await this.opts.storage.delete(table, id, now);
-    await this.broadcast({ seq, timestamp: now, table, recordId: id, op: OP_DELETE, body: null });
+    await this.broadcast({
+      seq,
+      timestamp: now,
+      table,
+      recordId: id,
+      op: OP_DELETE,
+      body: null,
+    });
   }
 
   async list(table: string): Promise<DeviceRecord[]> {
@@ -182,14 +209,26 @@ export class ReplicationEngine {
    * only entries with a newer timestamp are applied.
    */
   async handleIncoming(entry: ChangeEntry): Promise<void> {
-    const existing = await this.opts.storage.getTimestamp(entry.table, entry.recordId);
+    const existing = await this.opts.storage.getTimestamp(
+      entry.table,
+      entry.recordId,
+    );
     if (entry.timestamp <= existing) {
       return;
     }
     if (entry.op === OP_PUT) {
-      await this.opts.storage.put(entry.table, entry.recordId, entry.body, entry.timestamp);
+      await this.opts.storage.put(
+        entry.table,
+        entry.recordId,
+        entry.body,
+        entry.timestamp,
+      );
     } else {
-      await this.opts.storage.delete(entry.table, entry.recordId, entry.timestamp);
+      await this.opts.storage.delete(
+        entry.table,
+        entry.recordId,
+        entry.timestamp,
+      );
     }
   }
 
@@ -296,11 +335,23 @@ export class MemDeviceStorage implements DeviceStorage {
     return `${table} ${id}`;
   }
 
-  async put(table: string, id: string, body: Uint8Array | null, timestamp: number): Promise<number> {
+  async put(
+    table: string,
+    id: string,
+    body: Uint8Array | null,
+    timestamp: number,
+  ): Promise<number> {
     const seq = ++this.seq;
     const copy = body == null ? null : body.slice();
     this.records.set(this.key(table, id), { id, table, body: copy, timestamp });
-    this.log.push({ seq, timestamp, table, recordId: id, op: OP_PUT, body: copy });
+    this.log.push({
+      seq,
+      timestamp,
+      table,
+      recordId: id,
+      op: OP_PUT,
+      body: copy,
+    });
     return seq;
   }
 
@@ -311,7 +362,14 @@ export class MemDeviceStorage implements DeviceStorage {
   async delete(table: string, id: string, timestamp: number): Promise<number> {
     const seq = ++this.seq;
     this.records.delete(this.key(table, id));
-    this.log.push({ seq, timestamp, table, recordId: id, op: OP_DELETE, body: null });
+    this.log.push({
+      seq,
+      timestamp,
+      table,
+      recordId: id,
+      op: OP_DELETE,
+      body: null,
+    });
     return seq;
   }
 
