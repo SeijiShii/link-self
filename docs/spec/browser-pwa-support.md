@@ -153,7 +153,8 @@ home-visit-suite の全面 PWA 化決定（2026-07-07。単一 PWA + ロール�
 | メールボックス（store-and-forward） | ⚠️ 既存実装あり | `internal/storeforward`。常時稼働ノードでの預かり運用（ディスク永続化・容量管理）は未整備 |
 | M1 疎通 PoC（js-libp2p ↔ Go） | ✅ **PASSED**（2026-07-07） | `ts/poc-m1/`。WebSocket 直結 + Circuit Relay v2 経由の両経路で `/linkself/msg/1.0.0` の双方向往復に成功。Noise / yamux / uint32 framing / did:key 導出の互換を確認。js 側は `runOnLimitedConnection: true` が必要（Go 側 `WithAllowLimitedConn` と対） |
 | TS 実装（プロトコル層） | ✅ **M2 完了**（2026-07-07） | `ts/linkself/`（`@linkself/core`）。did / framing / envelope / auth / node / syncdb / group / role / permission / groupshare / devicesync / sqlproxy / network / pairing / **LinkSelfClient 組み立て**。123 テスト GREEN、ワイヤ形式は Go golden 一致、auth/node は Go 相手 live interop、Client は TS 2 ノード e2e 済み（詳細は `ts/linkself/README.md`） |
-| M3: sqlite-wasm + OPFS | ❌ 未着手 | sqlproxy の `SqlDatabase` 抽象へ注入。SQL MyDB / dataroot 相当 / 多タブ直列化 |
+| Go↔TS groupshare interop | ✅ **双方向 PASSED**（2026-07-07） | `core/cmd/poc-gsnode` + `ts/linkself/test/groupshare.interop.test.ts`。SharedRecord の Go→TS / TS→Go 双方向適用を実ワイヤで確認（Go 公開 API は groupshare 未露出のため internal 直結ハーネス。Phase C 後に pkg/linkself ベースへ置換） |
+| M3: sqlite-wasm + MyDB | ⚠️ **コア完了**（2026-07-07） | `SqliteWasmDatabase`（ブラウザで OPFS VFS 自動選択）+ `MyDB`（KV+SQL、SQL 書き込みの devicesync ミラー = Go と同一配線）。残: ブラウザ実機確認（COOP/COEP・Web Locks 多タブ直列化）・dataroot 相当 OPFS レイアウト・FastStart/peerstore 永続化 |
 
 実装ノート:
 - **autorelay は public でないリレーアドレスを広告対象から除外する**（`cleanupAddressSet`）。loopback 上のテストや LAN 内リレーでは `/p2p-circuit` アドレスが `Host.Addrs()` に現れないため、テストでは circuit アドレスを手動構築して接続確認している。公開アドレスを持つ本番リレーでは自動的に広告される
