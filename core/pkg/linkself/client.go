@@ -87,6 +87,16 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 		bootstrapPeers = append(bootstrapPeers, *info)
 	}
 
+	// Parse circuit relays
+	var staticRelays []peer.AddrInfo
+	for _, addrStr := range config.CircuitRelays {
+		info, err := peer.AddrInfoFromString(addrStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse circuit relay %q: %w", addrStr, err)
+		}
+		staticRelays = append(staticRelays, *info)
+	}
+
 	// Set default listen address if not provided
 	listenAddrs := config.ListenAddrs
 	if len(listenAddrs) == 0 {
@@ -95,9 +105,12 @@ func (c *client) Start(ctx context.Context, config Config) (*NodeInfo, error) {
 
 	// Create node
 	cfg := node.Config{
-		Identity:       identity,
-		ListenAddrs:    listenAddrs,
-		BootstrapPeers: bootstrapPeers,
+		Identity:           identity,
+		ListenAddrs:        listenAddrs,
+		BootstrapPeers:     bootstrapPeers,
+		StaticRelays:       staticRelays,
+		EnableRelayService: config.EnableRelayService,
+		ForceReachability:  config.ForceReachability,
 	}
 
 	n, err := node.New(ctx, cfg)

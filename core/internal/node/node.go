@@ -13,11 +13,11 @@ import (
 	"github.com/SeijiShii/link-self/core/internal/did"
 	"github.com/SeijiShii/link-self/core/internal/storeforward"
 	"github.com/libp2p/go-libp2p"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 // Message protocol for LinkSelf: length-prefixed payload.
@@ -42,6 +42,18 @@ type Config struct {
 	Identity       *did.Identity
 	ListenAddrs    []string
 	BootstrapPeers []peer.AddrInfo
+	// EnableRelayService serves Circuit Relay v2 for peers that cannot accept
+	// inbound connections (browser peers, NATed leaves). Enable on always-on nodes.
+	// Relayed traffic is Noise-encrypted end-to-end; the relay cannot read it.
+	EnableRelayService bool
+	// StaticRelays are relay nodes this node uses to stay reachable when it
+	// cannot accept inbound connections. A reservation is made and the node
+	// advertises /p2p-circuit addresses through them.
+	StaticRelays []peer.AddrInfo
+	// ForceReachability overrides AutoNAT detection: "public", "private" or "" (auto).
+	// "private" makes a node with StaticRelays reserve a relay slot immediately
+	// instead of waiting for AutoNAT to conclude it is unreachable.
+	ForceReachability string
 }
 
 // New creates a new Node (Host + DHT with linkself validator). Call Start to register in DHT and set auth handler.
@@ -58,6 +70,21 @@ func New(ctx context.Context, cfg Config) (*Node, error) {
 	}
 	if len(cfg.ListenAddrs) > 0 {
 		lopts = append(lopts, libp2p.ListenAddrStrings(cfg.ListenAddrs...))
+	}
+	if cfg.EnableRelayService {
+		lopts = append(lopts, libp2p.EnableRelayService())
+	}
+	if len(cfg.StaticRelays) > 0 {
+		lopts = append(lopts, libp2p.EnableAutoRelayWithStaticRelays(cfg.StaticRelays))
+	}
+	switch cfg.ForceReachability {
+	case "public":
+		lopts = append(lopts, libp2p.ForceReachabilityPublic())
+	case "private":
+		lopts = append(lopts, libp2p.ForceReachabilityPrivate())
+	case "":
+	default:
+		return nil, fmt.Errorf("invalid ForceReachability %q (want \"public\", \"private\" or empty)", cfg.ForceReachability)
 	}
 	h, err := libp2p.New(lopts...)
 	if err != nil {
@@ -123,10 +150,16 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
+// allowLimited permits opening streams over limited (relayed) connections,
+// so peers reachable only through a Circuit Relay can still exchange messages.
+func allowLimited(ctx context.Context) context.Context {
+	return network.WithAllowLimitedConn(ctx, "linkself")
+}
+
 func (n *Node) sendMessageToPeer(pid peer.ID, payload []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultDialTimeout)
 	defer cancel()
-	s, err := n.Host.NewStream(ctx, pid, protocol.ID(MessageProtocol))
+	s, err := n.Host.NewStream(allowLimited(ctx), pid, protocol.ID(MessageProtocol))
 	if err != nil {
 		return err
 	}
@@ -224,6 +257,7 @@ func (n *Node) SendMessage(ctx context.Context, peerDID string, payload []byte) 
 		n.StoreForward.Queue(peerDID, payload)
 		return nil
 	}
+	ctx = allowLimited(ctx)
 	if err := n.Host.Connect(ctx, info); err != nil {
 		n.StoreForward.Queue(peerDID, payload)
 		return nil
@@ -262,6 +296,7 @@ func (n *Node) ConnectToAddr(ctx context.Context, peerDID string, listenAddr str
 }
 
 func (n *Node) connectToAddr(ctx context.Context, peerDID string, info peer.AddrInfo) (network.Stream, error) {
+	ctx = allowLimited(ctx)
 	if err := n.Host.Connect(ctx, info); err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}

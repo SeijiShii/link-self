@@ -41,6 +41,14 @@ type StartParams struct {
 	ListenAddrs    []string `json:"listenAddrs,omitempty"`
 	BootstrapPeers []string `json:"bootstrapPeers,omitempty"`
 	IdentityPath   string   `json:"identityPath,omitempty"`
+	// CircuitRelays: relay nodes to stay reachable through when this node
+	// cannot accept inbound connections (multiaddr with /p2p/...).
+	CircuitRelays []string `json:"circuitRelays,omitempty"`
+	// EnableRelayService: serve Circuit Relay v2 for unreachable peers
+	// (enable on always-on nodes).
+	EnableRelayService bool `json:"enableRelayService,omitempty"`
+	// ForceReachability: "public", "private" or "" (auto detection).
+	ForceReachability string `json:"forceReachability,omitempty"`
 }
 
 type StartResult struct {
@@ -254,9 +262,12 @@ func handleStart(req *JSONRPCRequest) {
 
 	// Configure using public API
 	config := linkself.Config{
-		IdentityPath:   params.IdentityPath,
-		ListenAddrs:    params.ListenAddrs,
-		BootstrapPeers: params.BootstrapPeers,
+		IdentityPath:       params.IdentityPath,
+		ListenAddrs:        params.ListenAddrs,
+		BootstrapPeers:     params.BootstrapPeers,
+		CircuitRelays:      params.CircuitRelays,
+		EnableRelayService: params.EnableRelayService,
+		ForceReachability:  params.ForceReachability,
 	}
 
 	// Start node using public API

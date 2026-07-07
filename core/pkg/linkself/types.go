@@ -153,6 +153,44 @@ type Config struct {
 	// Example: "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeerID"
 	BootstrapPeers []string
 
+	// CircuitRelays are Circuit Relay v2 node addresses (multiaddr with /p2p/...)
+	// this node uses to stay reachable when it cannot accept inbound connections
+	// (e.g. behind carrier-grade NAT). A relay slot is reserved on them and
+	// /p2p-circuit addresses are advertised. Multiple relays may be listed for
+	// redundancy. Relayed traffic is Noise-encrypted end-to-end; relays cannot
+	// read it.
+	//
+	// CircuitRelays は、このノードが着信を受けられない環境（キャリア NAT 配下など）で
+	// 到達可能性を保つために使う Circuit Relay v2 ノードのアドレス（/p2p/... 付き
+	// multiaddr）です。リレー枠を予約し /p2p-circuit アドレスを広告します。
+	// 冗長化のため複数指定できます。リレー経由の通信は Noise で E2E 暗号化されており、
+	// リレーは内容を読めません。
+	CircuitRelays []string
+
+	// EnableRelayService serves Circuit Relay v2 for peers that cannot accept
+	// inbound connections (browser peers, NATed leaves). Enable this on
+	// always-on nodes (e.g. a cloud VM daemon). The service starts once the
+	// node determines it is publicly reachable (or ForceReachability is
+	// "public").
+	//
+	// EnableRelayService は、着信を受けられないピア（ブラウザピア・NAT 配下のリーフ）の
+	// ために Circuit Relay v2 を提供します。常時稼働ノード（クラウド VM のデーモン等）で
+	// 有効にしてください。サービスはノードが public reachable と判定された時点
+	//（または ForceReachability が "public" のとき）に開始されます。
+	EnableRelayService bool
+
+	// ForceReachability overrides AutoNAT reachability detection:
+	// "public", "private" or "" (automatic detection).
+	// Set "public" on a relay-serving node with a known public address;
+	// set "private" on a leaf known to be unreachable so it reserves a relay
+	// slot immediately.
+	//
+	// ForceReachability は、AutoNAT の到達可能性判定を上書きします:
+	// "public" / "private" / ""（自動判定）。
+	// 公開アドレスが確定しているリレー提供ノードでは "public" を、
+	// 着信不能が確定しているリーフでは "private"（即座にリレー枠を予約）を設定します。
+	ForceReachability string
+
 	// StorageBackend selects the storage implementation for all internal stores.
 	// Use MemoryBackend() for ephemeral in-memory storage (default when nil).
 	// Use SQLiteBackend(path) for persistent SQLite3 storage.

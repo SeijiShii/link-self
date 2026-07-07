@@ -415,3 +415,63 @@ func TestClientDefaultListenAddr(t *testing.T) {
 		t.Error("ListenAddr is empty")
 	}
 }
+
+func TestClientStartWithRelayConfig(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+
+	// Relay-serving node (always-on node role).
+	relayClient := NewClient()
+	relayInfo, err := relayClient.Start(ctx, Config{
+		IdentityPath:       filepath.Join(tempDir, "relay.json"),
+		ListenAddrs:        []string{"/ip4/127.0.0.1/tcp/0/ws"},
+		EnableRelayService: true,
+		ForceReachability:  "public",
+	})
+	if err != nil {
+		t.Fatalf("Start relay node: %v", err)
+	}
+	defer relayClient.Stop(ctx)
+
+	// Leaf node using the relay to stay reachable.
+	leafClient := NewClient()
+	_, err = leafClient.Start(ctx, Config{
+		IdentityPath:      filepath.Join(tempDir, "leaf.json"),
+		ListenAddrs:       []string{"/ip4/127.0.0.1/tcp/0"},
+		CircuitRelays:     []string{relayInfo.ListenAddr},
+		ForceReachability: "private",
+	})
+	if err != nil {
+		t.Fatalf("Start leaf node with CircuitRelays: %v", err)
+	}
+	defer leafClient.Stop(ctx)
+}
+
+func TestClientStartRejectsBadRelayConfig(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+
+	client := NewClient()
+	_, err := client.Start(ctx, Config{
+		IdentityPath:  filepath.Join(tempDir, "id.json"),
+		CircuitRelays: []string{"not-a-multiaddr"},
+	})
+	if err == nil {
+		client.Stop(ctx)
+		t.Fatal("Start accepted an invalid CircuitRelays entry")
+	}
+
+	client2 := NewClient()
+	_, err = client2.Start(ctx, Config{
+		IdentityPath:      filepath.Join(tempDir, "id2.json"),
+		ForceReachability: "sometimes",
+	})
+	if err == nil {
+		client2.Stop(ctx)
+		t.Fatal("Start accepted an invalid ForceReachability value")
+	}
+}
