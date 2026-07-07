@@ -16,7 +16,13 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/storeforward.ts` | `internal/storeforward` | ✅ | 単体テスト + live interop（未接続時キュー→接続時フラッシュ） |
 | `src/node.ts`（`LinkSelfNode`） | `internal/node`（リーフ側） | ✅ | **live interop**: connectToAddr（dial+auth+flush）・sendMessage・受信ルーティングを Go ノード相手に確認 |
 | `src/syncdb.ts` | `internal/syncdb` | ✅ | SyncRecord JSON が golden ベクタでバイト一致（`body:null` 含む）。LWW 適用は Go の sync_test.go を移植 |
-| group / role / permission / groupshare / devicesync / sqlproxy 等 | `internal/*` | ❌ 未着手 | — |
+| `src/role.ts` / `src/permission.ts` | `internal/role` / `internal/permission` | ✅ | DAG 循環検出・上位ロール包含・self/owner 委譲を単体テストで固定化 |
+| `src/group.ts` | `internal/group` | ✅ | 解散・自動オーナー昇格・他オーナー降格不可などのドメイン規則を移植 |
+| `src/groupshare.ts` | `internal/groupshare` | ✅ | SharedRecord / SubAnnouncement JSON golden 一致。チャンネル・保持期間・ロール権限・**topic 購読フィルタリング**込み |
+| `src/devicesync.ts` | `internal/devicesync` | ✅ | ChangeEntry JSON golden 一致。LWW レプリケーション・差分同期／full dump フォールバック・ChangeLog 保持ポリシー |
+| `src/sqlproxy.ts` | `internal/sqlproxy` | ✅ | 書き込み検出・テーブル名抽出・マイグレーション（Go と同一挙動、テーブル名抽出の限界もパリティ維持）。実 DB は `SqlDatabase` 抽象の背後（M3 で sqlite-wasm を注入） |
+| network / pairing / dht / dataroot / storage | `internal/*` | ❌ 未着手 | network（NetworkAPI）と pairing は次工程。dht はブラウザではクライアントモード限定、dataroot/storage は M3（OPFS）の領域 |
+| Client 組み立て（`pkg/linkself` 相当） | `pkg/linkself` | ❌ 未着手 | 上記モジュールを束ねる公開 API。M2 の最終工程 |
 
 ## 注意（Go 実装との互換性のための仕様）
 
@@ -39,7 +45,7 @@ golden ベクタ（`test/vectors.ts`）は Go 実装から生成した決定値�
 
 ## 次のステップ
 
-1. group / role / permission（グループモデル・権限判定）
-2. groupshare（チャンネル共有・購読フィルタリング — 残りの本丸、Go 側 約 3,500 行）
-3. devicesync / sqlproxy
-4. sqlite-wasm + OPFS 上の MyDB 相当 API（M3）
+1. network（NetworkAPI: ネットワーク作成・招待・脱退）/ pairing（QR 端末ペアリング）
+2. Client 組み立て（`pkg/linkself` 相当の公開 API — node + syncdb + groupshare + devicesync を束ねる）
+3. Go ノードとの groupshare / devicesync live interop テスト
+4. sqlite-wasm + OPFS 上の MyDB 相当 API（M3、`SqlDatabase` 抽象へ注入）

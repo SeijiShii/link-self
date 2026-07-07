@@ -21,3 +21,5 @@ export * from "./role.js";
 export * from "./permission.js";
 export * from "./group.js";
 export * from "./groupshare.js";
+export * from "./devicesync.js";
+export * from "./sqlproxy.js";
