@@ -21,8 +21,11 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/groupshare.ts` | `internal/groupshare` | ✅ | SharedRecord / SubAnnouncement JSON golden 一致。チャンネル・保持期間・ロール権限・**topic 購読フィルタリング**込み |
 | `src/devicesync.ts` | `internal/devicesync` | ✅ | ChangeEntry JSON golden 一致。LWW レプリケーション・差分同期／full dump フォールバック・ChangeLog 保持ポリシー |
 | `src/sqlproxy.ts` | `internal/sqlproxy` | ✅ | 書き込み検出・テーブル名抽出・マイグレーション（Go と同一挙動、テーブル名抽出の限界もパリティ維持）。実 DB は `SqlDatabase` 抽象の背後（M3 で sqlite-wasm を注入） |
-| network / pairing / dht / dataroot / storage | `internal/*` | ❌ 未着手 | network（NetworkAPI）と pairing は次工程。dht はブラウザではクライアントモード限定、dataroot/storage は M3（OPFS）の領域 |
-| Client 組み立て（`pkg/linkself` 相当） | `pkg/linkself` | ❌ 未着手 | 上記モジュールを束ねる公開 API。M2 の最終工程 |
+| `src/network.ts` | `internal/network` | ✅ | ロールゲート付き NetworkService。最終メンバー脱退で削除等のドメイン規則 |
+| `src/pairing.ts` | `internal/pairing` | ✅ | 鍵転送は libp2p protobuf 形式で **Go の MarshalPrivateKey と golden 一致**（Go 端末 ⇔ js 端末ペアリング互換） |
+| `src/client.ts`（`LinkSelfClient`） | `pkg/linkself` | ✅ | 全レイヤの組み立て + envelope 配線。**e2e**: 実 libp2p 2 ノードの TS クライアント同士で、オフライン購読→auth 時フラッシュ→topic フィルタ配信→LWW 適用のフルフローを検証。DeviceSyncSubscriptionStore 込み |
+| dht / dataroot / storage | `internal/*` | ❌ 未着手 | dht はブラウザではクライアントモード限定（リレー経由接続が主経路のため優先度低）。dataroot/storage は M3（OPFS + sqlite-wasm）の領域 |
+| SQL ベース MyDB | `pkg/linkself`（myDB） | ❌ M3 | sqlproxy の `SqlDatabase` 抽象に sqlite-wasm を注入して実現 |
 
 ## 注意（Go 実装との互換性のための仕様）
 
@@ -45,7 +48,7 @@ golden ベクタ（`test/vectors.ts`）は Go 実装から生成した決定値�
 
 ## 次のステップ
 
-1. network（NetworkAPI: ネットワーク作成・招待・脱退）/ pairing（QR 端末ペアリング）
-2. Client 組み立て（`pkg/linkself` 相当の公開 API — node + syncdb + groupshare + devicesync を束ねる）
-3. Go ノードとの groupshare / devicesync live interop テスト
-4. sqlite-wasm + OPFS 上の MyDB 相当 API（M3、`SqlDatabase` 抽象へ注入）
+1. Go ノードとの groupshare / devicesync live interop テスト（Go 側ハーネスに pkg/linkself Client を組み込む。ワイヤ形式は golden 一致済みのためリスクは低い）
+2. M3: sqlite-wasm + OPFS（`SqlDatabase` 抽象へ注入し SQL ベース MyDB を実現、dataroot 相当の OPFS レイアウト、多タブ直列化）
+3. ブラウザ実機（Vite + PWA）での動作確認、FastStart / peerstore 永続化（IndexedDB/OPFS）
+4. home-visit-suite PWA への統合（M5）
