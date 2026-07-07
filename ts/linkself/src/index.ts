@@ -6,3 +6,6 @@ export * from "./router.js";
 export * from "./storeforward.js";
 export * from "./node.js";
 export * from "./syncdb.js";
+export * from "./role.js";
+export * from "./permission.js";
+export * from "./group.js";
