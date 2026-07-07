@@ -23,3 +23,5 @@ export * from "./group.js";
 export * from "./groupshare.js";
 export * from "./devicesync.js";
 export * from "./sqlproxy.js";
+export * from "./network.js";
+export * from "./pairing.js";
