@@ -43,6 +43,12 @@ export interface NetworkStore {
   updateNetwork(id: string, n: Network): Promise<void>;
   deleteNetwork(id: string): Promise<void>;
   listForMember(memberDID: string): Promise<string[]>;
+  /**
+   * Upsert a network under its exact `n.id` (unlike createNetwork, which
+   * generates one). Used to apply a network snapshot received from a peer
+   * (join bootstrap / membership propagation).
+   */
+  putNetwork(n: Network): Promise<void>;
 }
 
 /**
@@ -102,7 +108,11 @@ export class NetworkService {
   }
 
   /** Remove a member. The requester must have adminRole. */
-  async kick(networkId: string, requesterDID: string, targetDID: string): Promise<void> {
+  async kick(
+    networkId: string,
+    requesterDID: string,
+    targetDID: string,
+  ): Promise<void> {
     const n = await this.getAndCheck(networkId, requesterDID);
     if (!n.members.includes(targetDID)) {
       throw new NetworkError("target_not_member");
@@ -131,7 +141,10 @@ export class NetworkService {
     await this.store.updateNetwork(networkId, n);
   }
 
-  private async getAndCheck(networkId: string, requesterDID: string): Promise<Network> {
+  private async getAndCheck(
+    networkId: string,
+    requesterDID: string,
+  ): Promise<Network> {
     const n = await this.store.getNetwork(networkId);
     if (n == null) {
       throw new NetworkError("network_not_found");
@@ -170,11 +183,22 @@ export class MemNetworkStore implements NetworkStore {
     this.networks.delete(id);
   }
 
+  async putNetwork(n: Network): Promise<void> {
+    this.networks.set(n.id, copyNetwork(n));
+  }
+
   async listForMember(memberDID: string): Promise<string[]> {
-    return [...this.networks.values()].filter((n) => n.members.includes(memberDID)).map((n) => n.id);
+    return [...this.networks.values()]
+      .filter((n) => n.members.includes(memberDID))
+      .map((n) => n.id);
   }
 }
 
 function copyNetwork(n: Network): Network {
-  return { id: n.id, suiteId: n.suiteId, members: [...n.members], memberRoles: { ...n.memberRoles } };
+  return {
+    id: n.id,
+    suiteId: n.suiteId,
+    members: [...n.members],
+    memberRoles: { ...n.memberRoles },
+  };
 }

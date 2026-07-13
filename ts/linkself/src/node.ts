@@ -118,6 +118,10 @@ export class LinkSelfNode {
     this.router.onSubAnnounce = fn;
   }
 
+  setOnNetworkMeta(fn: MessageHandler): void {
+    this.router.onNetworkMeta = fn;
+  }
+
   /** Called after successful authentication (both incoming and outgoing). */
   setOnAuthSuccess(fn: (peerDID: string) => void): void {
     this.onAuthSuccess = fn;

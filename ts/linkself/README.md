@@ -21,7 +21,8 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/groupshare.ts` | `internal/groupshare` | ✅ | SharedRecord / SubAnnouncement JSON golden 一致。チャンネル・保持期間・ロール権限・**topic 購読フィルタリング**込み |
 | `src/devicesync.ts` | `internal/devicesync` | ✅ | ChangeEntry JSON golden 一致。LWW レプリケーション・差分同期／full dump フォールバック・ChangeLog 保持ポリシー |
 | `src/sqlproxy.ts` | `internal/sqlproxy` | ✅ | 書き込み検出・テーブル名抽出・マイグレーション（Go と同一挙動、テーブル名抽出の限界もパリティ維持）。実 DB は `SqlDatabase` 抽象の背後（M3 で sqlite-wasm を注入） |
-| `src/network.ts` | `internal/network` | ✅ | ロールゲート付き NetworkService。最終メンバー脱退で削除等のドメイン規則 |
+| `src/network.ts` | `internal/network` | ✅ | ロールゲート付き NetworkService。最終メンバー脱退で削除等のドメイン規則。`putNetwork`（id 指定 upsert）= スナップショット適用の基盤 |
+| `src/network-meta.ts` | （Go 未実装・TS 先行） | ✅ | ネットワークのメンバー/ロール状態を共有データとして伝播。`NetworkMetaTracker`（epoch LWW で NetworkStore に upsert）+ marshal/unmarshal。`network_meta` envelope で配信。admin の membership 変更を他 admin へ収束。設計: `docs/spec/network-invitation.md §4` |
 | `src/pairing.ts` | `internal/pairing` | ✅ | 鍵転送は libp2p protobuf 形式で **Go の MarshalPrivateKey と golden 一致**（Go 端末 ⇔ js 端末ペアリング互換） |
 | `src/invitation.ts` | （Go 未実装・TS 先行） | ✅ | ネットワーク招待トークン（別 DID を参加させる署名付き capability、鍵は運ばない）。create/verify（署名＋期限）・base64url 符号化・`#/join?i=` URL。設計: `docs/spec/network-invitation.md` |
 | `src/join.ts` | （Go 未実装・TS 先行） | ✅ 2a+2b | 参加ハンドシェイクの受理ロジック（`JoinService.accept`: 署名/期限・発行者/受理者の admin 判定・nonce 単回使用・addMember・スナップショット返却）と JSON wire codec。**live libp2p 配線**は node.ts（`/linkself/join/1.0.0` ハンドラ・`requestJoin`）＋ client.ts（`client.requestJoin` / acceptor 登録）で実装。**e2e**（`test/join.e2e.test.ts`）: 実 2 ノードで stranger が招待提示→ネットワーク追加・nonce 単回使用・非 admin 偽造拒否を検証 |

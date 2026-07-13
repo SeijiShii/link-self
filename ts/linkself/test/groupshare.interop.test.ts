@@ -32,12 +32,16 @@ class FixedNetworkStore implements NetworkStore {
   }
   async updateNetwork(): Promise<void> {}
   async deleteNetwork(): Promise<void> {}
+  async putNetwork(): Promise<void> {}
   async listForMember(): Promise<string[]> {
     return [this.network.id];
   }
 }
 
-async function eventually<T>(fn: () => Promise<T | null | false>, timeoutMs = 15_000): Promise<T> {
+async function eventually<T>(
+  fn: () => Promise<T | null | false>,
+  timeoutMs = 15_000,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const v = await fn();
@@ -64,7 +68,10 @@ describe.skipIf(!hasGo)("groupshare interop with the Go layer", () => {
     });
     goNode = await new Promise((resolve, reject) => {
       let buf = "";
-      const t = setTimeout(() => reject(new Error("timed out waiting for Go node info")), 60_000);
+      const t = setTimeout(
+        () => reject(new Error("timed out waiting for Go node info")),
+        60_000,
+      );
       goProc.stdout!.on("data", (chunk: Buffer) => {
         buf += chunk.toString();
         const line = buf.split("\n")[0];
@@ -74,7 +81,9 @@ describe.skipIf(!hasGo)("groupshare interop with the Go layer", () => {
         }
       });
       goProc.on("error", reject);
-      goProc.on("exit", (code) => reject(new Error(`go harness exited early: ${code}`)));
+      goProc.on("exit", (code) =>
+        reject(new Error(`go harness exited early: ${code}`)),
+      );
     });
 
     libp2p = await createLibp2p({
@@ -111,7 +120,9 @@ describe.skipIf(!hasGo)("groupshare interop with the Go layer", () => {
     await client.node.sendMessage(goNode.did, enc.encode("go-put"));
     await eventually(async () => plainMessages.includes("put-done"));
 
-    const rec = await eventually(async () => await client.groupShare.get("visits", "go-1"));
+    const rec = await eventually(
+      async () => await client.groupShare.get("visits", "go-1"),
+    );
     expect(dec.decode(rec.body!)).toBe("from-go");
     expect(rec.did).toBe(goNode.did);
     expect(rec.topic).toBe("area/1");
@@ -119,10 +130,17 @@ describe.skipIf(!hasGo)("groupshare interop with the Go layer", () => {
   });
 
   it("TS → Go: a record put here arrives and applies on the Go side", async () => {
-    await client.groupShare.put("visits", "area/1", "js-1", enc.encode("from-js"));
+    await client.groupShare.put(
+      "visits",
+      "area/1",
+      "js-1",
+      enc.encode("from-js"),
+    );
 
     await client.node.sendMessage(goNode.did, enc.encode("check:js-1"));
-    const found = await eventually(async () => plainMessages.find((m) => m.startsWith("found:")) ?? null);
+    const found = await eventually(
+      async () => plainMessages.find((m) => m.startsWith("found:")) ?? null,
+    );
     expect(found).toBe("found:from-js");
   });
 });

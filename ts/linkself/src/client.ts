@@ -14,6 +14,7 @@ import {
 import {
   TYPE_DEVICE_SYNC,
   TYPE_GROUP_SHARE,
+  TYPE_NETWORK_META,
   TYPE_SUB_ANNOUNCE,
   wrap,
 } from "./envelope.js";
@@ -34,6 +35,12 @@ import {
   NetworkService,
   type NetworkStore,
 } from "./network.js";
+import {
+  marshalNetworkMeta,
+  metaOf,
+  NetworkMetaTracker,
+  unmarshalNetworkMeta,
+} from "./network-meta.js";
 import { RoleDAG, type RoleDefs } from "./role.js";
 import {
   decodeJoinRequest,
@@ -183,6 +190,8 @@ export class LinkSelfClient {
   readonly networkStore: NetworkStore;
   /** Accepts incoming invitations (admin side of the join handshake). */
   readonly joinService: JoinService;
+  /** Applies membership snapshots to the network store (LWW convergence). */
+  readonly networkMeta: NetworkMetaTracker;
   readonly remoteSubs: SubscriptionStore;
   readonly roleDAG: RoleDAG;
   /** This device's transport identity (= libp2p host key, peerId ≡ this DID). */
@@ -196,6 +205,10 @@ export class LinkSelfClient {
   private readonly libp2p: Libp2pLike;
   /** The user's signed device roster (two-layer mode), or null. */
   private roster: SignedRoster | null;
+  /** Clock for membership epochs (LWW). */
+  private readonly nowFn: () => number;
+  /** Role required to mutate/propagate membership. */
+  private readonly adminRole: string;
 
   constructor(opts: LinkSelfClientOptions) {
     this.identity = opts.identity;
@@ -203,6 +216,7 @@ export class LinkSelfClient {
     this.roster = opts.roster ?? null;
     this.sqlDatabase = opts.sqlDatabase ?? null;
     this.knownPeers = opts.knownPeers ?? [];
+    this.nowFn = opts.now ?? Date.now;
     this.libp2p = opts.libp2p;
     // Devicesync/groupshare scope is the ACCOUNT (user) DID; transport is the
     // device DID. In single-device use the two coincide.
@@ -231,6 +245,7 @@ export class LinkSelfClient {
     this.roleDAG = RoleDAG.build(opts.roles ?? {});
     this.networkStore = opts.networkStore ?? new MemNetworkStore();
     const adminRole = opts.adminRole ?? "admin";
+    this.adminRole = adminRole;
     this.network = new NetworkService(
       this.networkStore,
       this.roleDAG,
@@ -247,6 +262,7 @@ export class LinkSelfClient {
       opts.consumedNonces ?? new MemConsumedNonceStore(),
       opts.now,
     );
+    this.networkMeta = new NetworkMetaTracker(this.networkStore);
 
     // GroupShare: members resolved from the network store, excluding self.
     const memberResolver = {
@@ -332,7 +348,16 @@ export class LinkSelfClient {
         ...req,
         inviteeDID: peerDID,
       });
+      if (res.ok) {
+        // Converge the other members (esp. other admins) on the new roster.
+        await this.publishMembership(res.network.networkId);
+      }
       return encodeJoinResponse(res);
+    });
+    this.node.setOnNetworkMeta((peerDID, payload) => {
+      void this.handleNetworkMeta(peerDID, payload).catch((err) => {
+        console.error("linkself: network meta incoming:", err);
+      });
     });
 
     await this.fastStart();
@@ -471,7 +496,57 @@ export class LinkSelfClient {
       multiaddr(addr),
       requestBytes,
     );
-    return decodeJoinResponse(responseBytes);
+    const res = decodeJoinResponse(responseBytes);
+    if (res.ok) {
+      // Trusted bootstrap: the snapshot arrived over the authenticated join
+      // stream, so seed the local network store from it (this device joins the
+      // data plane). Subsequent network_meta broadcasts converge from here.
+      await this.networkMeta.apply({
+        ...res.network,
+        epoch: this.nowFn(),
+      });
+    }
+    return res;
+  }
+
+  /**
+   * Broadcast the current membership of a network to its members so they
+   * converge (LWW). Called after admin mutations (e.g. accepting a join); the
+   * caller must be an admin for peers to accept the update.
+   */
+  async publishMembership(networkId: string): Promise<void> {
+    const net = await this.networkStore.getNetwork(networkId);
+    if (net == null) {
+      return;
+    }
+    const meta = metaOf(net, this.nowFn());
+    this.networkMeta.noteEpoch(networkId, meta.epoch);
+    await this.sendToGroup(
+      net.members,
+      wrap(TYPE_NETWORK_META, marshalNetworkMeta(meta)),
+    );
+  }
+
+  /**
+   * Apply an incoming membership snapshot. Only accepted when the sender is an
+   * admin of the network in our current local view (prevents a non-admin member
+   * forging membership); the initial network is bootstrapped via the trusted
+   * join response, not here.
+   */
+  private async handleNetworkMeta(
+    peerDID: string,
+    payload: Uint8Array,
+  ): Promise<void> {
+    const meta = unmarshalNetworkMeta(payload);
+    const net = await this.networkStore.getNetwork(meta.networkId);
+    if (net == null) {
+      return; // unknown network — bootstrap happens via the join response
+    }
+    const writerRole = net.memberRoles[peerDID] ?? "";
+    if (!this.roleDAG.hasRole(writerRole, this.adminRole)) {
+      return; // sender is not an admin — ignore
+    }
+    await this.networkMeta.apply(meta);
   }
 
   /** Derive a peer's DID from its Ed25519 public key. */

@@ -29,6 +29,7 @@ class FixedNetworkStore implements NetworkStore {
   }
   async updateNetwork(): Promise<void> {}
   async deleteNetwork(): Promise<void> {}
+  async putNetwork(): Promise<void> {}
   async listForMember(memberDID: string): Promise<string[]> {
     return this.network.members.includes(memberDID) ? [this.network.id] : [];
   }
@@ -62,7 +63,10 @@ async function makePeer(network: Network): Promise<{
   return { libp2p, identity, client };
 }
 
-async function eventually<T>(fn: () => Promise<T | null | false>, timeoutMs = 10_000): Promise<T> {
+async function eventually<T>(
+  fn: () => Promise<T | null | false>,
+  timeoutMs = 10_000,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const v = await fn();
@@ -79,11 +83,19 @@ describe("LinkSelfClient e2e (two real libp2p nodes)", () => {
   beforeAll(async () => {
     // The network fixture is completed with real DIDs after key generation,
     // so build peers first with a shared mutable network object.
-    const network: Network = { id: "net-1", suiteId: "jp.test", members: [], memberRoles: {} };
+    const network: Network = {
+      id: "net-1",
+      suiteId: "jp.test",
+      members: [],
+      memberRoles: {},
+    };
     a = await makePeer(network);
     b = await makePeer(network);
     network.members = [a.identity.did, b.identity.did];
-    network.memberRoles = { [a.identity.did]: "editor", [b.identity.did]: "editor" };
+    network.memberRoles = {
+      [a.identity.did]: "editor",
+      [b.identity.did]: "editor",
+    };
   }, 60_000);
 
   afterAll(async () => {
@@ -94,26 +106,46 @@ describe("LinkSelfClient e2e (two real libp2p nodes)", () => {
   it("subscription announced before connect is flushed on auth and filters broadcasts", async () => {
     // B subscribes while offline — the announcement is queued (store-and-forward).
     await b.client.groupShare.subscribe("visits", ["area/1"]);
-    expect(b.client.node.storeForward.pendingCount(a.identity.did)).toBeGreaterThan(0);
+    expect(
+      b.client.node.storeForward.pendingCount(a.identity.did),
+    ).toBeGreaterThan(0);
 
     // B connects to A; auth flushes the queued announcement.
-    const aAddr = a.libp2p.getMultiaddrs().find((m) => m.toString().includes("/ws"))!;
-    await b.client.node.connectToAddr(a.identity.did, multiaddr(aAddr.toString()));
+    const aAddr = a.libp2p
+      .getMultiaddrs()
+      .find((m) => m.toString().includes("/ws"))!;
+    await b.client.node.connectToAddr(
+      a.identity.did,
+      multiaddr(aAddr.toString()),
+    );
 
     // A eventually records B's subscription.
     const subs = await eventually(
-      async () => await a.client.remoteSubs.getSubscription(b.identity.did, "visits"),
+      async () =>
+        await a.client.remoteSubs.getSubscription(b.identity.did, "visits"),
     );
     expect(subs).toEqual(["area/1"]);
 
     // A puts a record with a matching topic → B receives and applies it.
-    await a.client.groupShare.put("visits", "area/1", "rec-1", enc.encode('{"v":1}'));
-    const got = await eventually(async () => await b.client.groupShare.get("visits", "rec-1"));
+    await a.client.groupShare.put(
+      "visits",
+      "area/1",
+      "rec-1",
+      enc.encode('{"v":1}'),
+    );
+    const got = await eventually(
+      async () => await b.client.groupShare.get("visits", "rec-1"),
+    );
     expect(dec.decode(got.body!)).toBe('{"v":1}');
     expect(got.did).toBe(a.identity.did);
 
     // A puts a record with a non-matching topic → B is filtered out.
-    await a.client.groupShare.put("visits", "area/9", "rec-2", enc.encode('{"v":2}'));
+    await a.client.groupShare.put(
+      "visits",
+      "area/9",
+      "rec-2",
+      enc.encode('{"v":2}'),
+    );
     await new Promise((r) => setTimeout(r, 800));
     expect(await b.client.groupShare.get("visits", "rec-2")).toBeNull();
   }, 30_000);
@@ -123,7 +155,10 @@ describe("LinkSelfClient e2e (two real libp2p nodes)", () => {
     a.client.node.setOnMessage((_did, payload) => {
       received.push(dec.decode(payload));
     });
-    await b.client.sendToGroup([a.identity.did, b.identity.did], enc.encode("hello group"));
+    await b.client.sendToGroup(
+      [a.identity.did, b.identity.did],
+      enc.encode("hello group"),
+    );
     await eventually(async () => received.includes("hello group"));
   }, 30_000);
 });
@@ -138,7 +173,10 @@ describe("DeviceSyncSubscriptionStore", () => {
     expect(await store.getSubscription("did:self", "visits")).toBeNull();
     await store.setSubscription("did:self", "visits", ["a", "b"]);
     await store.setSubscription("did:self", "places", ["*"]);
-    expect(await store.getSubscription("did:self", "visits")).toEqual(["a", "b"]);
+    expect(await store.getSubscription("did:self", "visits")).toEqual([
+      "a",
+      "b",
+    ]);
     const all = await store.getAllSubscriptions("did:self");
     expect(all.get("visits")).toEqual(["a", "b"]);
     expect(all.get("places")).toEqual(["*"]);

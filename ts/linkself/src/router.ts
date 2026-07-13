@@ -2,7 +2,13 @@
  * Message router: dispatches incoming messages by envelope type.
  * Port of core/internal/node/router.go (Go).
  */
-import { TYPE_DEVICE_SYNC, TYPE_GROUP_SHARE, TYPE_SUB_ANNOUNCE, unwrap } from "./envelope.js";
+import {
+  TYPE_DEVICE_SYNC,
+  TYPE_GROUP_SHARE,
+  TYPE_NETWORK_META,
+  TYPE_SUB_ANNOUNCE,
+  unwrap,
+} from "./envelope.js";
 
 export type MessageHandler = (peerDID: string, payload: Uint8Array) => void;
 
@@ -10,6 +16,7 @@ export class MessageRouter {
   onDeviceSync?: MessageHandler;
   onGroupShare?: MessageHandler;
   onSubAnnounce?: MessageHandler;
+  onNetworkMeta?: MessageHandler;
   /** Plain / legacy messages (also the fallback for unknown types). */
   onMessage?: MessageHandler;
 
@@ -25,6 +32,9 @@ export class MessageRouter {
         break;
       case TYPE_SUB_ANNOUNCE:
         this.onSubAnnounce?.(peerDID, payload);
+        break;
+      case TYPE_NETWORK_META:
+        this.onNetworkMeta?.(peerDID, payload);
         break;
       default:
         this.onMessage?.(peerDID, payload);

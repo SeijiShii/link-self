@@ -5,11 +5,14 @@
  * []byte as standard base64 with padding.
  */
 
-export type EnvelopeType = "devicesync" | "groupshare" | "sub_announce" | "message";
+export type EnvelopeType =
+  "devicesync" | "groupshare" | "sub_announce" | "network_meta" | "message";
 
 export const TYPE_DEVICE_SYNC: EnvelopeType = "devicesync";
 export const TYPE_GROUP_SHARE: EnvelopeType = "groupshare";
 export const TYPE_SUB_ANNOUNCE: EnvelopeType = "sub_announce";
+/** Network membership snapshot broadcast (TS-first; Go falls back to message). */
+export const TYPE_NETWORK_META: EnvelopeType = "network_meta";
 export const TYPE_MESSAGE: EnvelopeType = "message";
 
 /** Create an envelope with the given type and payload, returning JSON bytes. */
@@ -23,7 +26,10 @@ export function wrap(type: EnvelopeType, payload: Uint8Array): Uint8Array {
  * If the data is not a valid envelope, returns TYPE_MESSAGE and the original
  * data (matching the Go implementation's fallback behaviour).
  */
-export function unwrap(data: Uint8Array): { type: EnvelopeType; payload: Uint8Array } {
+export function unwrap(data: Uint8Array): {
+  type: EnvelopeType;
+  payload: Uint8Array;
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(data));
@@ -37,7 +43,10 @@ export function unwrap(data: Uint8Array): { type: EnvelopeType; payload: Uint8Ar
   if (typeof env.type !== "string" || env.type === "") {
     return { type: TYPE_MESSAGE, payload: data };
   }
-  const payload = typeof env.payload === "string" ? base64ToBytes(env.payload) : new Uint8Array(0);
+  const payload =
+    typeof env.payload === "string"
+      ? base64ToBytes(env.payload)
+      : new Uint8Array(0);
   return { type: env.type as EnvelopeType, payload };
 }
 

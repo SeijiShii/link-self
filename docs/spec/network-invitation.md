@@ -4,7 +4,7 @@
 
 既存ネットワークに **新しい DID を参加させる**ための、URL / QR で配布できる時間制限付き招待の設計。home-visit-suite の「他のユーザーをグループに招待する」機能（URL 送付・QR 手渡し・トークン期限 3 日）を実現する、LinkSelf 側のプロトコル。
 
-> **状態:** Slice 1（招待トークン `invitation.ts`）・Slice 2（参加ハンドシェイク `join.ts` + node/client の live 配線、e2e GREEN）実装済み（TS-first）。Slice 3（メンバーシップ伝播）・Slice 4（PWA 統合）は未着手。
+> **状態:** Slice 1（招待トークン `invitation.ts`）・Slice 2（参加ハンドシェイク `join.ts` + live 配線）・Slice 3（メンバーシップ伝播 `network-meta.ts` + 被招待者 bootstrap）実装済み・e2e GREEN（TS-first）。Slice 4（PWA 統合）は未着手。
 
 ---
 
@@ -84,9 +84,15 @@
 
 ---
 
-## 4. メンバーシップの伝播（Slice 3・設計）
+## 4. メンバーシップの伝播（Slice 3・実装済み）
 
-複数の管理者がいる場合、参加を受理した管理者以外もメンバー変更を知る必要がある。ネットワークのメンバー／ロール状態自体を GroupShare の well-known チャンネル（例: `network-meta`）に載せ、`members` 権限で全メンバーに配信して収束させる。受理→ addMember → network-meta 更新、で他管理者のローカル状態も追随する。
+複数の管理者がいる場合、参加を受理した管理者以外もメンバー変更を知る必要がある。ネットワークのメンバー／ロール状態自体を共有データとして配信して収束させる。
+
+**実装（`network-meta.ts`）:**
+- `network_meta` envelope 型（TS 先行。Go は未知型として message にフォールバックするため相互運用を壊さない）で `NetworkMeta{networkId, suiteId, members, memberRoles, epoch}` を全メンバーへブロードキャスト（`client.publishMembership`）。
+- 受理 admin が addMember 後に自動 publish。受信側は **送信者が自ローカル状態で admin か**を検証してから適用（非 admin メンバーによる membership 偽造を防ぐ）。`NetworkMetaTracker` が epoch の LWW で `NetworkStore.putNetwork` に upsert。
+- **被招待者の bootstrap:** 認証済み join ストリームで受け取った応答スナップショットを `client.requestJoin` 内でローカルへ適用（＝データ面へ参加）。以後の network_meta で収束する。GroupShare（チャンネルが単一 groupId 束縛）ではなく専用 envelope にしたのは、参加前の被招待者や複数ネットワークを跨ぐケースで束縛が合わないため。
+- **残:** nonce 失効リストの配布、複数ネットワーク同時参加時の分離、Network への永続 epoch 保持（現状は tracker 内メモリ）。
 
 ---
 
