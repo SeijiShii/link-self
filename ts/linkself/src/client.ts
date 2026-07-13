@@ -432,6 +432,20 @@ export class LinkSelfClient {
     return this.userIdentity.did;
   }
 
+  /**
+   * This node's currently-reachable multiaddrs (including `/p2p-circuit`
+   * relayed ones once connected to a relay), each ending in `/p2p/<peerId>`.
+   * Use these as an invitation's `relays` so an invitee can dial this admin.
+   */
+  selfAddrs(): string[] {
+    const addrs = this.libp2p.getMultiaddrs?.() ?? [];
+    const pid = this.libp2p.peerId.toString();
+    return addrs.map((m) => {
+      const s = m.toString();
+      return s.includes("/p2p/") ? s : `${s}/p2p/${pid}`;
+    });
+  }
+
   /** Update the signed device roster (e.g. after pairing a new device). */
   setRoster(roster: SignedRoster): void {
     this.roster = roster;

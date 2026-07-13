@@ -37,6 +37,8 @@ export interface Libp2pLike {
     options?: { signal?: AbortSignal },
   ): Promise<Connection>;
   getConnections(peerId?: PeerId): Connection[];
+  /** This node's currently-advertised addresses (incl. /p2p-circuit relayed). */
+  getMultiaddrs?(): Multiaddr[];
 }
 
 export class LinkSelfNode {
