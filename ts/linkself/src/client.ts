@@ -167,7 +167,10 @@ export class LinkSelfClient {
     this.deviceSync = new ReplicationEngine({
       storage: opts.deviceStorage ?? new MemDeviceStorage(),
       selfDID,
-      peers: async () => [], // single device until pairing registers peers
+      // Other devices of this same user (same DID) that have authenticated —
+      // each runs its own transport key, so they are distinct peers under one
+      // DID. Populated as device peers connect + mutual-auth.
+      peers: async () => this.node.peersForDID(selfDID),
       send: async (peerId, payload) => {
         const { peerIdFromString } = await import("@libp2p/peer-id");
         await this.node.sendToPeerId(
@@ -270,9 +273,15 @@ export class LinkSelfClient {
   private async fastStart(): Promise<void> {
     await Promise.all(
       this.knownPeers.map(async (peer) => {
+        // Peers that share our DID are other devices of this user: they run
+        // their own transport key, so authenticate with mutual auth (peerId
+        // decoupled from DID) rather than the one-way peerId≡DID auth.
+        const mutual = peer.did === this.identity.did;
         for (const addr of peer.addrs) {
           try {
-            await this.node.connectToAddr(peer.did, multiaddr(addr));
+            await this.node.connectToAddr(peer.did, multiaddr(addr), {
+              mutual,
+            });
             return;
           } catch {
             // try the next address
@@ -291,11 +300,17 @@ export class LinkSelfClient {
   snapshotKnownPeers(): KnownPeer[] {
     const byDID = new Map<string, Set<string>>();
     for (const conn of this.libp2p.getConnections()) {
-      const pub = conn.remotePeer.publicKey;
-      if (pub == null || pub.type !== "Ed25519") {
-        continue;
+      // Prefer the DID verified at auth (with device transport keys the peer
+      // ID no longer encodes the DID); fall back to the transport key for
+      // one-way-auth / Go peers where peerId ≡ DID.
+      let did = this.node.didForPeer(conn.remotePeer);
+      if (did == null) {
+        const pub = conn.remotePeer.publicKey;
+        if (pub == null || pub.type !== "Ed25519") {
+          continue;
+        }
+        did = publicKeyToDID(pub);
       }
-      const did = publicKeyToDID(pub);
       const addrs = byDID.get(did) ?? new Set<string>();
       // remoteAddr already includes /p2p/<peer-id> or can be dialed as-is;
       // append the peer id when missing so connectToAddr can verify it.
@@ -337,6 +352,11 @@ export class LinkSelfClient {
   /** Derive a peer's DID from its Ed25519 public key. */
   static didOfPublicKey = publicKeyToDID;
 
-  /** Resolve the libp2p PeerId for a DID. */
+  /**
+   * Resolve the libp2p PeerId a DID would have if the DID key were used as the
+   * transport key. Valid only for one-way-auth / Go peers (peerId ≡ DID); with
+   * per-device transport keys a DID maps to several distinct peer IDs, so use
+   * the node's authenticated peer lookup instead.
+   */
   static peerIdOfDID = didToPeerId;
 }
