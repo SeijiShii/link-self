@@ -23,6 +23,7 @@ Go 実装（`core/`）と**ワイヤ互換の第二実装**。ブラウザ / PWA
 | `src/sqlproxy.ts` | `internal/sqlproxy` | ✅ | 書き込み検出・テーブル名抽出・マイグレーション（Go と同一挙動、テーブル名抽出の限界もパリティ維持）。実 DB は `SqlDatabase` 抽象の背後（M3 で sqlite-wasm を注入） |
 | `src/network.ts` | `internal/network` | ✅ | ロールゲート付き NetworkService。最終メンバー脱退で削除等のドメイン規則 |
 | `src/pairing.ts` | `internal/pairing` | ✅ | 鍵転送は libp2p protobuf 形式で **Go の MarshalPrivateKey と golden 一致**（Go 端末 ⇔ js 端末ペアリング互換） |
+| `src/invitation.ts` | （Go 未実装・TS 先行） | ✅ | ネットワーク招待トークン（別 DID を参加させる署名付き capability、鍵は運ばない）。create/verify（署名＋期限）・base64url 符号化・`#/join?i=` URL。設計: `docs/spec/network-invitation.md` |
 | `src/client.ts`（`LinkSelfClient`） | `pkg/linkself` | ✅ | 全レイヤの組み立て + envelope 配線。**e2e**: 実 libp2p 2 ノードの TS クライアント同士で、オフライン購読→auth 時フラッシュ→topic フィルタ配信→LWW 適用のフルフローを検証。DeviceSyncSubscriptionStore 込み |
 | `src/sqlite.ts`（`SqliteWasmDatabase`）+ `src/sqlite-worker.ts` | `storage/sqlite`（ncruces/go-sqlite3 相当） | ✅ 実ブラウザ検証済み | @sqlite.org/sqlite-wasm。**永続（ファイル名指定）は専用 Worker で OPFS SAHPool VFS を動かす**（`createSyncAccessHandle` は Worker のみのため main thread 不可）。`:memory:`（Node テスト）は main thread の `oo1.DB`。多タブ直列化はアプリ層（Web Locks 等）の責務。ブラウザでのリロード跨ぎ永続を `ts/browser-e2e` で検証 |
 | `src/mydb.ts`（`MyDB` + `wireSqlSync`） | `pkg/linkself`（myDB） | ✅ | KV（devicesync 経由レプリケーション）+ SQL（sqlproxy 経由）。SQL 書き込みの devicesync ミラーリング（row-readback）は Go client と同一配線。SyncScope は Go 同様 Phase C 待ちの記録のみ |

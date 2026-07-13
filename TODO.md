@@ -125,6 +125,15 @@ link-self/
 - [ ] **差分同期ハンドシェイク** — DeviceSync の SyncWith（high-water mark 交換 → 差分送信）
 - [ ] **旧 syncdb 廃止**（Phase E）— `core/internal/syncdb/` を削除
 
+### ネットワーク招待（home-visit-suite「グループ招待」ドライバ）
+
+設計: [docs/spec/network-invitation.md](docs/spec/network-invitation.md)。URL/QR で別 DID を既存ネットワークに参加させる（TTL 3 日）。TS 先行。
+
+- [x] **Slice 1: 招待トークン** — `ts/linkself/src/invitation.ts`。署名付き capability（鍵は運ばない）・create/verify・base64url・`#/join?i=` URL。単体テスト GREEN
+- [ ] **Slice 2: 参加ハンドシェイク** — `/linkself/join/1.0.0`。被招待者が relay 経由で Admin へ dial→invite 提示→検証→`NetworkService.addMember`→network snapshot + GroupShare bootstrap 返却。client.ts 配線 + interop
+- [ ] **Slice 3: メンバーシップ伝播** — 受理後に他 Admin へメンバー/ロール状態を収束（GroupShare `network-meta` チャンネル）・nonce 単回使用/失効
+- [ ] **Slice 4: PWA 統合** — home-visit-suite `/users` で発行（URL/QR）、JoinPage 受理、ロール→RoleDAG
+
 ### サンプルアプリ・クライアント
 
 - [x] **サンプルチャットアプリ: 友達追加機能** — DID 入力・友達申請・承認/拒否・永続化は実装済み

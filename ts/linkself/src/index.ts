@@ -25,6 +25,7 @@ export * from "./devicesync.js";
 export * from "./sqlproxy.js";
 export * from "./network.js";
 export * from "./pairing.js";
+export * from "./invitation.js";
 export * from "./roster.js";
 export * from "./client.js";
 export * from "./mydb.js";
