@@ -3,11 +3,16 @@ import { peerIdFromPublicKey } from "@libp2p/peer-id";
 import { describe, expect, it } from "vitest";
 import {
   AuthFailedError,
+  mutualAuth,
   respondToChallenge,
   verifyChallenge,
   WrongPeerError,
 } from "../src/auth.js";
-import { generateIdentity, didToPeerId } from "../src/did.js";
+import {
+  generateIdentity,
+  didToPeerId,
+  identityFromPrivateKey,
+} from "../src/did.js";
 import { StreamReader } from "../src/framing.js";
 import type { DuplexStream } from "../src/framing.js";
 import { bytesToHex, GOLDEN, hexToBytes } from "./vectors.js";
@@ -41,7 +46,8 @@ function streamPair(): [DuplexStream, DuplexStream] {
 
     private end(): void {
       this.ended = true;
-      for (const w of this.waiters.splice(0)) w({ done: true, value: undefined });
+      for (const w of this.waiters.splice(0))
+        w({ done: true, value: undefined });
     }
 
     [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
@@ -69,13 +75,20 @@ describe("auth challenge-response", () => {
     const responder = await generateIdentity();
     const [initiatorStream, responderStream] = streamPair();
     await Promise.all([
-      verifyChallenge(initiatorStream, responder.did, didToPeerId(responder.did)),
+      verifyChallenge(
+        initiatorStream,
+        responder.did,
+        didToPeerId(responder.did),
+      ),
       respondToChallenge(responderStream, responder.privateKey),
     ]);
   });
 
   it("responder produces the same signature as Go for the golden challenge", async () => {
-    const priv = await generateKeyPairFromSeed("Ed25519", hexToBytes(GOLDEN.seedHex));
+    const priv = await generateKeyPairFromSeed(
+      "Ed25519",
+      hexToBytes(GOLDEN.seedHex),
+    );
     const [initiatorStream, responderStream] = streamPair();
 
     const respond = respondToChallenge(responderStream, priv);
@@ -94,7 +107,9 @@ describe("auth challenge-response", () => {
     const actual = await generateIdentity();
     const [initiatorStream, responderStream] = streamPair();
     const respond = respondToChallenge(responderStream, actual.privateKey);
-    await expect(verifyChallenge(initiatorStream, expected.did)).rejects.toThrow(AuthFailedError);
+    await expect(
+      verifyChallenge(initiatorStream, expected.did),
+    ).rejects.toThrow(AuthFailedError);
     await respond.catch(() => {});
   });
 
@@ -104,9 +119,79 @@ describe("auth challenge-response", () => {
     const otherPeer = peerIdFromPublicKey(other.publicKey);
     const [initiatorStream, responderStream] = streamPair();
     const respond = respondToChallenge(responderStream, responder.privateKey);
-    await expect(verifyChallenge(initiatorStream, responder.did, otherPeer)).rejects.toThrow(
-      WrongPeerError,
-    );
+    await expect(
+      verifyChallenge(initiatorStream, responder.did, otherPeer),
+    ).rejects.toThrow(WrongPeerError);
     await respond.catch(() => {});
+  });
+});
+
+describe("mutualAuth (multi-device, peerId decoupled from DID)", () => {
+  it("both sides learn and verify the peer DID", async () => {
+    const a = await generateIdentity();
+    const b = await generateIdentity();
+    const [sa, sb] = streamPair();
+    const [ra, rb] = await Promise.all([
+      mutualAuth(sa, a, true, b.did),
+      mutualAuth(sb, b, false, a.did),
+    ]);
+    expect(ra).toBe(b.did);
+    expect(rb).toBe(a.did);
+  });
+
+  it("works without a pre-known expected DID (learns it from the peer)", async () => {
+    const a = await generateIdentity();
+    const b = await generateIdentity();
+    const [sa, sb] = streamPair();
+    const [ra, rb] = await Promise.all([
+      mutualAuth(sa, a, true),
+      mutualAuth(sb, b, false),
+    ]);
+    expect(ra).toBe(b.did);
+    expect(rb).toBe(a.did);
+  });
+
+  it("authenticates two devices that share one DID (different key objects)", async () => {
+    // Same seed on both "devices" ⇒ same DID; each runs its own auth. The
+    // transport key (peerId) is irrelevant here — that decoupling is the point.
+    const seed = new Uint8Array(32).fill(7);
+    const key = await generateKeyPairFromSeed("Ed25519", seed);
+    const dev1 = identityFromPrivateKey(key);
+    const dev2 = identityFromPrivateKey(key);
+    expect(dev1.did).toBe(dev2.did);
+    const [s1, s2] = streamPair();
+    const [r1, r2] = await Promise.all([
+      mutualAuth(s1, dev1, true, dev2.did),
+      mutualAuth(s2, dev2, false, dev1.did),
+    ]);
+    expect(r1).toBe(dev1.did);
+    expect(r2).toBe(dev1.did);
+  });
+
+  it("rejects a peer whose announced DID is not the expected one", async () => {
+    const a = await generateIdentity();
+    const b = await generateIdentity();
+    const c = await generateIdentity();
+    const [sa, sb] = streamPair();
+    const init = mutualAuth(sa, a, true, c.did); // expect c, but b answers
+    const resp = mutualAuth(sb, b, false);
+    void resp.catch(() => {});
+    await expect(init).rejects.toThrow(WrongPeerError);
+    // The initiator aborted mid-handshake; closing its stream unblocks the
+    // responder's pending read (in production node.ts closes on auth error).
+    await sa.close();
+  });
+
+  it("rejects a forged signature (peer cannot prove its announced DID)", async () => {
+    // Responder announces b.did but signs with a different key ⇒ verify fails.
+    const a = await generateIdentity();
+    const b = await generateIdentity();
+    const imposter = await generateIdentity();
+    const forged = { ...b, privateKey: imposter.privateKey };
+    const [sa, sb] = streamPair();
+    const init = mutualAuth(sa, a, true, b.did);
+    const resp = mutualAuth(sb, forged, false);
+    await expect(init).rejects.toThrow(AuthFailedError);
+    await resp.catch(() => {});
   });
 });
