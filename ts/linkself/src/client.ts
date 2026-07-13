@@ -36,6 +36,11 @@ import {
 } from "./network.js";
 import { RoleDAG, type RoleDefs } from "./role.js";
 import { didToPeerId } from "./did.js";
+import {
+  rosterDeviceDIDs,
+  rosterHasDevice,
+  type SignedRoster,
+} from "./roster.js";
 
 const SUBS_TABLE = "_groupshare_subs";
 
@@ -98,7 +103,24 @@ export class DeviceSyncSubscriptionStore implements SubscriptionStore {
 export interface LinkSelfClientOptions {
   /** A started libp2p instance (transports/encryption configured by the app). */
   libp2p: Libp2pLike;
+  /**
+   * The transport/device identity — this device's key, which is also the
+   * libp2p host key (so peerId ≡ this DID). In the two-layer model this is the
+   * DEVICE identity; in single-device use it doubles as the account identity.
+   */
   identity: Identity;
+  /**
+   * The account (user) identity, visible to the network and shared across the
+   * user's devices. Signs the device roster. Defaults to `identity` (single
+   * device = its own account). See roster.ts.
+   */
+  userIdentity?: Identity;
+  /**
+   * The user's signed device roster. When set, devicesync targets and accepts
+   * only the sibling device DIDs it lists (roster membership = trust that a
+   * device belongs to this user). Update with setRoster() as devices pair.
+   */
+  roster?: SignedRoster;
   /** Role hierarchy; null = empty DAG (only "members" works). */
   roles?: RoleDefs | null;
   /** Role required for network management operations. Default "admin". */
@@ -148,29 +170,38 @@ export class LinkSelfClient {
   readonly networkStore: NetworkStore;
   readonly remoteSubs: SubscriptionStore;
   readonly roleDAG: RoleDAG;
+  /** This device's transport identity (= libp2p host key, peerId ≡ this DID). */
   readonly identity: Identity;
+  /** The account identity (user DID). Equals `identity` in single-device use. */
+  readonly userIdentity: Identity;
   /** Unified data API (KV + SQL). SQL methods require options.sqlDatabase. */
   myDB!: MyDB;
   private readonly sqlDatabase: SqlDatabase | null;
   private readonly knownPeers: KnownPeer[];
   private readonly libp2p: Libp2pLike;
+  /** The user's signed device roster (two-layer mode), or null. */
+  private roster: SignedRoster | null;
 
   constructor(opts: LinkSelfClientOptions) {
     this.identity = opts.identity;
+    this.userIdentity = opts.userIdentity ?? opts.identity;
+    this.roster = opts.roster ?? null;
     this.sqlDatabase = opts.sqlDatabase ?? null;
     this.knownPeers = opts.knownPeers ?? [];
     this.libp2p = opts.libp2p;
-    const selfDID = opts.identity.did;
+    // Devicesync/groupshare scope is the ACCOUNT (user) DID; transport is the
+    // device DID. In single-device use the two coincide.
+    const selfDID = this.userIdentity.did;
     this.node = new LinkSelfNode(opts.libp2p, opts.identity);
 
-    // DeviceSync: sends wrapped entries to specific peer devices.
+    // DeviceSync: sends wrapped entries to this user's other devices.
     this.deviceSync = new ReplicationEngine({
       storage: opts.deviceStorage ?? new MemDeviceStorage(),
       selfDID,
-      // Other devices of this same user (same DID) that have authenticated —
-      // each runs its own transport key, so they are distinct peers under one
-      // DID. Populated as device peers connect + mutual-auth.
-      peers: async () => this.node.peersForDID(selfDID),
+      // The user's other devices: roster device DIDs (peerId ≡ deviceDID) that
+      // are currently connected, excluding this device. Falls back to the
+      // authenticated-peer set when no roster is configured.
+      peers: async () => this.deviceSyncPeers(),
       send: async (peerId, payload) => {
         const { peerIdFromString } = await import("@libp2p/peer-id");
         await this.node.sendToPeerId(
@@ -236,7 +267,13 @@ export class LinkSelfClient {
     }
 
     await this.node.start();
-    this.node.setOnDeviceSync((_peerDID, payload) => {
+    this.node.setOnDeviceSync((peerDID, payload) => {
+      // peerDID is the sender's DEVICE DID (peerId ≡ deviceDID). In two-layer
+      // mode, only accept devicesync from a sibling device in the signed
+      // roster — roster membership (user-key signed) is the trust anchor.
+      if (this.roster != null && !rosterHasDevice(this.roster, peerDID)) {
+        return;
+      }
       void this.deviceSync
         .handleIncoming(unmarshalChangeEntry(payload))
         .catch((err) => {
@@ -328,8 +365,34 @@ export class LinkSelfClient {
     }));
   }
 
+  /** The account (user) DID — what the network and group members see. */
   get did(): string {
-    return this.identity.did;
+    return this.userIdentity.did;
+  }
+
+  /** Update the signed device roster (e.g. after pairing a new device). */
+  setRoster(roster: SignedRoster): void {
+    this.roster = roster;
+  }
+
+  /**
+   * The user's other devices to replicate to: roster device DIDs (peerId ≡
+   * deviceDID) currently connected, excluding this device. Without a roster,
+   * falls back to peers authenticated as the account DID.
+   */
+  private deviceSyncPeers(): string[] {
+    if (this.roster == null) {
+      return this.node.peersForDID(this.userIdentity.did);
+    }
+    const out: string[] = [];
+    for (const deviceDID of rosterDeviceDIDs(this.roster)) {
+      if (deviceDID === this.identity.did) continue; // skip self device
+      const peerId = didToPeerId(deviceDID);
+      if (this.libp2p.getConnections(peerId).length > 0) {
+        out.push(peerId.toString());
+      }
+    }
+    return out;
   }
 
   /**
@@ -338,7 +401,7 @@ export class LinkSelfClient {
    */
   async sendToGroup(memberDIDs: string[], payload: Uint8Array): Promise<void> {
     for (const did of memberDIDs) {
-      if (did === this.identity.did) {
+      if (did === this.userIdentity.did) {
         continue;
       }
       try {
