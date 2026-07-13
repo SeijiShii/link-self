@@ -134,7 +134,7 @@ link-self/
   - [x] **2a 純ロジック+codec** — `ts/linkself/src/join.ts`（`JoinService.accept`・JSON wire codec）。単体テスト GREEN
   - [x] **2b live libp2p 配線** — node.ts に `/linkself/join/1.0.0` ハンドラ + `requestJoin`（noise 認証済み transport 鍵で peerDID をバインド）、client.ts に `requestJoin` / acceptor 登録。e2e GREEN（実 2 ノード）。被招待者側の snapshot 永続化（データ面参加）は Slice 4
 - [x] **Slice 3: メンバーシップ伝播** — `network-meta.ts`（`NetworkMetaTracker` epoch LWW + `network_meta` envelope）。admin の membership 変更を他 admin へ収束。被招待者は join 応答スナップショットからローカル bootstrap（データ面参加）。node/router/envelope に `network_meta` 追加、`NetworkStore.putNetwork` 追加。unit + 実 3 ノード e2e GREEN。残: nonce 失効の配布、複数ネットワーク時の channel 分離
-- [ ] **Slice 4: PWA 統合** — home-visit-suite `/users` で発行（URL/QR・TTL3日）、JoinPage 受理、ロール→RoleDAG、リレー設定（VITE_LINKSELF_RELAYS）、wants/CODEMAP/i18n
+- [x] **Slice 4: PWA 統合**（home-visit-suite 側リポジトリで実装済み）— group-invite/group-network ラッパ、client-factory roles、GroupNetworkService 露出 + DI、発行UI（GroupInviteSection）、JoinPage + `#/join` ルート、i18n。typecheck + 269 tests GREEN。ライブ動作は常時稼働リレー（VITE_LINKSELF_RELAYS）が前提＝インフラ課題。被招待者初回 ID 作成のローカル役割精緻化が残
 
 ### サンプルアプリ・クライアント
 
