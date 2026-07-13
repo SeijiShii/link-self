@@ -15,6 +15,7 @@ import {
 } from "./auth.js";
 import { publicKeyToDID, didToPeerId, type Identity } from "./did.js";
 import { encodeFrame, StreamReader } from "./framing.js";
+import { JOIN_PROTOCOL_ID } from "./join.js";
 import { MessageRouter, type MessageHandler } from "./router.js";
 import { StoreForward } from "./storeforward.js";
 import type { Connection, PeerId, Stream } from "@libp2p/interface";
@@ -44,6 +45,15 @@ export class LinkSelfNode {
   private readonly libp2p: Libp2pLike;
   private readonly router = new MessageRouter();
   private onAuthSuccess?: (peerDID: string) => void;
+  /**
+   * Accepts an incoming join request. Given the authenticated peer DID and the
+   * raw request frame, returns the response frame. Wired by the client to the
+   * JoinService; unset means this node does not accept joins.
+   */
+  private joinAcceptor?: (
+    peerDID: string,
+    requestBytes: Uint8Array,
+  ) => Promise<Uint8Array>;
   /**
    * Remote peers whose DID we have authenticated, keyed by transport peer ID.
    * With mutual auth the transport key (peerId) no longer equals the DID key,
@@ -83,6 +93,13 @@ export class LinkSelfNode {
       },
       { runOnLimitedConnection: true },
     );
+    await this.libp2p.handle(
+      JOIN_PROTOCOL_ID,
+      (stream, connection) => {
+        void this.handleJoinStream(stream, connection);
+      },
+      { runOnLimitedConnection: true },
+    );
   }
 
   setOnMessage(fn: MessageHandler): void {
@@ -104,6 +121,13 @@ export class LinkSelfNode {
   /** Called after successful authentication (both incoming and outgoing). */
   setOnAuthSuccess(fn: (peerDID: string) => void): void {
     this.onAuthSuccess = fn;
+  }
+
+  /** Register the handler that accepts incoming join requests (see JoinService). */
+  setJoinAcceptor(
+    fn: (peerDID: string, requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ): void {
+    this.joinAcceptor = fn;
   }
 
   /**
@@ -143,6 +167,29 @@ export class LinkSelfNode {
     await verifyChallenge(stream, expectedDID, connection.remotePeer);
     this.recordAuth(connection.remotePeer, expectedDID);
     await this.afterAuth(expectedDID, connection.remotePeer);
+  }
+
+  /**
+   * Invitee side of the join handshake: dial an admin, present the request
+   * frame on the `/linkself/join/1.0.0` stream, and read the response frame.
+   *
+   * No separate auth stream is needed: the noise handshake at connection setup
+   * already proves the peer's transport key, and for single-device peers
+   * (peerId ≡ account DID) that key IS the DID the admin binds the membership
+   * to. The addr must include /p2p/<admin-peer-id>.
+   */
+  async requestJoin(
+    addr: Multiaddr,
+    requestBytes: Uint8Array,
+  ): Promise<Uint8Array> {
+    const connection = await this.libp2p.dial(addr);
+    const stream = await connection.newStream(JOIN_PROTOCOL_ID, {
+      runOnLimitedConnection: true,
+    });
+    stream.send(encodeFrame(requestBytes));
+    const response = await new StreamReader(stream).readFrame();
+    await stream.close();
+    return response;
   }
 
   /**
@@ -237,6 +284,26 @@ export class LinkSelfNode {
       }
     } catch (err) {
       console.error("linkself: message stream:", err);
+    }
+  }
+
+  /** Admin side of the join handshake: read request, accept, write response. */
+  private async handleJoinStream(
+    stream: Stream,
+    connection: Connection,
+  ): Promise<void> {
+    try {
+      const requestBytes = await new StreamReader(stream).readFrame();
+      const peerDID = this.remoteDID(connection);
+      if (this.joinAcceptor == null || peerDID == null) {
+        await stream.close();
+        return;
+      }
+      const response = await this.joinAcceptor(peerDID, requestBytes);
+      stream.send(encodeFrame(response));
+      await stream.close();
+    } catch (err) {
+      console.error("linkself: join stream:", err);
     }
   }
 

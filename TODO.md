@@ -130,9 +130,9 @@ link-self/
 設計: [docs/spec/network-invitation.md](docs/spec/network-invitation.md)。URL/QR で別 DID を既存ネットワークに参加させる（TTL 3 日）。TS 先行。
 
 - [x] **Slice 1: 招待トークン** — `ts/linkself/src/invitation.ts`。署名付き capability（鍵は運ばない）・create/verify・base64url・`#/join?i=` URL。単体テスト GREEN
-- [~] **Slice 2: 参加ハンドシェイク** — `/linkself/join/1.0.0`
+- [x] **Slice 2: 参加ハンドシェイク** — `/linkself/join/1.0.0`
   - [x] **2a 純ロジック+codec** — `ts/linkself/src/join.ts`（`JoinService.accept`・JSON wire codec）。単体テスト GREEN
-  - [ ] **2b live libp2p 配線** — node.ts に `/linkself/join/1.0.0` ハンドラ、被招待者側 requestJoin（relay dial→mutualAuth→request/response）、client.ts 組立 + e2e interop
+  - [x] **2b live libp2p 配線** — node.ts に `/linkself/join/1.0.0` ハンドラ + `requestJoin`（noise 認証済み transport 鍵で peerDID をバインド）、client.ts に `requestJoin` / acceptor 登録。e2e GREEN（実 2 ノード）。被招待者側の snapshot 永続化（データ面参加）は Slice 4
 - [ ] **Slice 3: メンバーシップ伝播** — 受理後に他 Admin へメンバー/ロール状態を収束（GroupShare `network-meta` チャンネル）・nonce 単回使用/失効
 - [ ] **Slice 4: PWA 統合** — home-visit-suite `/users` で発行（URL/QR）、JoinPage 受理、ロール→RoleDAG
 

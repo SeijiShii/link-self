@@ -4,7 +4,7 @@
 
 既存ネットワークに **新しい DID を参加させる**ための、URL / QR で配布できる時間制限付き招待の設計。home-visit-suite の「他のユーザーをグループに招待する」機能（URL 送付・QR 手渡し・トークン期限 3 日）を実現する、LinkSelf 側のプロトコル。
 
-> **状態:** Slice 1（招待トークン）実装済み（`ts/linkself/src/invitation.ts`、TS-first）。Slice 2–3 は設計のみ。
+> **状態:** Slice 1（招待トークン `invitation.ts`）・Slice 2（参加ハンドシェイク `join.ts` + node/client の live 配線、e2e GREEN）実装済み（TS-first）。Slice 3（メンバーシップ伝播）・Slice 4（PWA 統合）は未着手。
 
 ---
 
@@ -52,7 +52,7 @@
 
 ---
 
-## 3. 参加ハンドシェイク（Slice 2・設計）
+## 3. 参加ハンドシェイク（Slice 2・実装済み）
 
 ネットワークのメンバーリストは**各ノードがローカル保持**（network-concept.md §1-2、DHT に実体なし）。したがって受理は**管理者のノード上**で起きる。
 
@@ -75,6 +75,12 @@
 
 - **受理者**は `inviterDID` 本人でなくてよい（任意の Admin メンバーが発行者署名を検証できる）。ただし単回使用（nonce 消費）と失効は各ノードでの追跡が必要。
 - 応答にネットワークスナップショット（members + roles）と GroupShare のチャンネル bootstrap を含め、被招待者が即同期に入れるようにする。
+
+### 実装ノート（Slice 2b）
+
+- **別 auth ストリームは張らない。** 接続確立時の noise ハンドシェイクが相手の transport 鍵を暗号学的に証明するため、単一デバイス（`peerId ≡ アカウント DID`）では受理ノードが `remoteDID(connection)` で被招待者の DID を得られる。受理側は request 内の自己申告 `inviteeDID` ではなく**この transport 認証済み DID** をメンバーにバインドする（他人の DID を騙れない）。
+- **既知の限界:** 2 層 identity（device 鍵とアカウント鍵が分離した既存マルチデバイスユーザー）が招待を受ける場合、transport 鍵は device DID なのでバインドがずれる。新規参加は単一デバイスから始まる想定でありこのケースは後続（roster 提示付きハンドシェイクで解消）。
+- 被招待者側での snapshot ローカル永続化（＝データ面への参加）は Slice 4。`MemNetworkStore.createNetwork` は id を自動採番するため、同一 `networkId` で upsert する経路は Slice 4 で追加する。
 
 ---
 

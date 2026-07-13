@@ -35,6 +35,17 @@ import {
   type NetworkStore,
 } from "./network.js";
 import { RoleDAG, type RoleDefs } from "./role.js";
+import {
+  decodeJoinRequest,
+  decodeJoinResponse,
+  encodeJoinRequest,
+  encodeJoinResponse,
+  JoinService,
+  MemConsumedNonceStore,
+  type ConsumedNonceStore,
+  type JoinResponse,
+} from "./join.js";
+import type { Invite } from "./invitation.js";
 import { didToPeerId } from "./did.js";
 import {
   rosterDeviceDIDs,
@@ -129,6 +140,8 @@ export interface LinkSelfClientOptions {
   deviceStorage?: DeviceStorage;
   sharedStorage?: SharedStorage;
   networkStore?: NetworkStore;
+  /** Tracks consumed invite nonces (single-use joins). Default in-memory. */
+  consumedNonces?: ConsumedNonceStore;
   remoteSubs?: SubscriptionStore;
   memberRoleResolver?: MemberRoleResolver | null;
   /**
@@ -168,6 +181,8 @@ export class LinkSelfClient {
   readonly groupShare: GroupShareLayer;
   readonly network: NetworkService;
   readonly networkStore: NetworkStore;
+  /** Accepts incoming invitations (admin side of the join handshake). */
+  readonly joinService: JoinService;
   readonly remoteSubs: SubscriptionStore;
   readonly roleDAG: RoleDAG;
   /** This device's transport identity (= libp2p host key, peerId ≡ this DID). */
@@ -215,10 +230,22 @@ export class LinkSelfClient {
     // Network service with the role DAG.
     this.roleDAG = RoleDAG.build(opts.roles ?? {});
     this.networkStore = opts.networkStore ?? new MemNetworkStore();
+    const adminRole = opts.adminRole ?? "admin";
     this.network = new NetworkService(
       this.networkStore,
       this.roleDAG,
-      opts.adminRole ?? "admin",
+      adminRole,
+    );
+
+    // Join handshake acceptance (admin side). Adds an invited DID to a network
+    // after verifying the invite and admin authority; single-use via nonces.
+    this.joinService = new JoinService(
+      this.network,
+      this.networkStore,
+      this.roleDAG,
+      adminRole,
+      opts.consumedNonces ?? new MemConsumedNonceStore(),
+      opts.now,
     );
 
     // GroupShare: members resolved from the network store, excluding self.
@@ -296,6 +323,16 @@ export class LinkSelfClient {
       void this.groupShare.announceAllSubscriptions().catch((err) => {
         console.error("linkself: announce subscriptions:", err);
       });
+    });
+    this.node.setJoinAcceptor(async (peerDID, requestBytes) => {
+      // Bind the membership to the transport-authenticated peer DID, not the
+      // self-asserted inviteeDID in the request (prevents claiming another DID).
+      const req = decodeJoinRequest(requestBytes);
+      const res = await this.joinService.accept(this.userIdentity.did, {
+        ...req,
+        inviteeDID: peerDID,
+      });
+      return encodeJoinResponse(res);
     });
 
     await this.fastStart();
@@ -410,6 +447,31 @@ export class LinkSelfClient {
         // parity with Go: per-member send errors are ignored
       }
     }
+  }
+
+  /**
+   * Invitee side of the join handshake: dial an admin at `addr` (a multiaddr
+   * that includes /p2p/<admin-peer-id>, e.g. from `invite.relays`), present the
+   * invite, and return the admin's decision. On success the response carries the
+   * network snapshot; persisting it locally (so this device joins the data
+   * plane) is the caller's responsibility (Slice 4).
+   */
+  async requestJoin(
+    addr: string,
+    invite: Invite,
+    displayName: string,
+  ): Promise<JoinResponse> {
+    const requestBytes = encodeJoinRequest({
+      v: 1,
+      invite,
+      inviteeDID: this.userIdentity.did,
+      displayName,
+    });
+    const responseBytes = await this.node.requestJoin(
+      multiaddr(addr),
+      requestBytes,
+    );
+    return decodeJoinResponse(responseBytes);
   }
 
   /** Derive a peer's DID from its Ed25519 public key. */

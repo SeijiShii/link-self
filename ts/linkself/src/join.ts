@@ -15,7 +15,11 @@
  * Design: docs/spec/network-invitation.md §3
  */
 import { type Invite, InviteError, verifyInvite } from "./invitation.js";
-import { NetworkError, type NetworkService, type NetworkStore } from "./network.js";
+import {
+  NetworkError,
+  type NetworkService,
+  type NetworkStore,
+} from "./network.js";
 import type { RoleDAG } from "./role.js";
 
 /** libp2p protocol id for the join handshake. */
@@ -49,8 +53,7 @@ export type JoinRejectCode =
   | "already_member";
 
 export type JoinResponse =
-  | { ok: true; network: NetworkSnapshot }
-  | { ok: false; code: JoinRejectCode };
+  { ok: true; network: NetworkSnapshot } | { ok: false; code: JoinRejectCode };
 
 /** Tracks consumed invite nonces so an invite is single-use per accepting node. */
 export interface ConsumedNonceStore {
@@ -81,7 +84,6 @@ export class JoinService {
     private readonly dag: RoleDAG,
     private readonly adminRole: string,
     private readonly nonces: ConsumedNonceStore,
-    private readonly suiteId: string,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -94,15 +96,15 @@ export class JoinService {
       return { ok: false, code: (err as InviteError).code };
     }
 
-    // 2. The invite must be for this application.
-    if (req.invite.suiteId !== this.suiteId) {
-      return { ok: false, code: "invite_invalid" };
-    }
-
-    // 3. The target network must exist locally.
+    // 2. The target network must exist locally.
     const net = await this.store.getNetwork(req.invite.networkId);
     if (net == null) {
       return { ok: false, code: "network_not_found" };
+    }
+
+    // 3. The invite must be for this network's application (anti cross-app replay).
+    if (req.invite.suiteId !== net.suiteId) {
+      return { ok: false, code: "invite_invalid" };
     }
 
     // 4. Authority: the issuer must be (or have been) an admin member.

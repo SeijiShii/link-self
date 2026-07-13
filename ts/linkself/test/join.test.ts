@@ -30,7 +30,7 @@ async function setup() {
   const networkId = await networks.create(SUITE, admin.did);
   const nonces = new MemConsumedNonceStore();
   const now = () => 1_000_000;
-  const join = new JoinService(networks, store, DAG, "admin", nonces, SUITE, now);
+  const join = new JoinService(networks, store, DAG, "admin", nonces, now);
   return { store, networks, admin, networkId, join, now };
 }
 
@@ -40,7 +40,12 @@ async function invite(
   now: () => number,
   role = "member",
 ) {
-  return createInvite(issuer, { networkId, suiteId: SUITE, role, relays: RELAYS }, 60_000, now);
+  return createInvite(
+    issuer,
+    { networkId, suiteId: SUITE, role, relays: RELAYS },
+    60_000,
+    now,
+  );
 }
 
 describe("JoinService.accept", () => {
@@ -71,7 +76,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "invite_expired" });
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "invite_expired",
+    });
   });
 
   it("rejects a tampered invite", async () => {
@@ -84,7 +92,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "invite_invalid" });
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "invite_invalid",
+    });
   });
 
   it("rejects an invite for a different suite", async () => {
@@ -96,8 +107,16 @@ describe("JoinService.accept", () => {
       60_000,
       now,
     );
-    const req: JoinRequest = { v: 1, invite: foreign, inviteeDID: invitee.did, displayName: "x" };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "invite_invalid" });
+    const req: JoinRequest = {
+      v: 1,
+      invite: foreign,
+      inviteeDID: invitee.did,
+      displayName: "x",
+    };
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "invite_invalid",
+    });
   });
 
   it("rejects an invite for an unknown network", async () => {
@@ -109,7 +128,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "network_not_found" });
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "network_not_found",
+    });
   });
 
   it("rejects an invite signed by a non-admin member", async () => {
@@ -123,7 +145,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "inviter_not_admin" });
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "inviter_not_admin",
+    });
   });
 
   it("rejects acceptance by a non-admin node", async () => {
@@ -136,7 +161,6 @@ describe("JoinService.accept", () => {
       DAG,
       "admin",
       new MemConsumedNonceStore(),
-      SUITE,
       now,
     );
     const invitee = await generateIdentity();
@@ -146,7 +170,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await nonAdminJoin.accept(member.did, req)).toEqual({ ok: false, code: "not_admin" });
+    expect(await nonAdminJoin.accept(member.did, req)).toEqual({
+      ok: false,
+      code: "not_admin",
+    });
   });
 
   it("rejects a re-used (consumed) invite", async () => {
@@ -165,7 +192,10 @@ describe("JoinService.accept", () => {
       inviteeDID: (await generateIdentity()).did,
       displayName: "b",
     };
-    expect(await join.accept(admin.did, second)).toEqual({ ok: false, code: "invite_consumed" });
+    expect(await join.accept(admin.did, second)).toEqual({
+      ok: false,
+      code: "invite_consumed",
+    });
   });
 
   it("rejects when the invitee is already a member", async () => {
@@ -178,7 +208,10 @@ describe("JoinService.accept", () => {
       inviteeDID: invitee.did,
       displayName: "x",
     };
-    expect(await join.accept(admin.did, req)).toEqual({ ok: false, code: "already_member" });
+    expect(await join.accept(admin.did, req)).toEqual({
+      ok: false,
+      code: "already_member",
+    });
   });
 });
 
@@ -197,7 +230,12 @@ describe("join wire codec", () => {
   it("round-trips success and failure responses", () => {
     const ok: JoinResponse = {
       ok: true,
-      network: { networkId: "n", suiteId: SUITE, members: ["a", "b"], memberRoles: { a: "admin", b: "member" } },
+      network: {
+        networkId: "n",
+        suiteId: SUITE,
+        members: ["a", "b"],
+        memberRoles: { a: "admin", b: "member" },
+      },
     };
     const bad: JoinResponse = { ok: false, code: "invite_expired" };
     expect(decodeJoinResponse(encodeJoinResponse(ok))).toEqual(ok);
